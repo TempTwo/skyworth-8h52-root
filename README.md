@@ -13,10 +13,11 @@
 | Root | ✅ | `/system/xbin/su`（setuid root，armeabi-v7a 静态二进制），重启后依然有效 |
 | 开机自启桌面 | ✅ | `com.oversea.aslauncher`（AS Launcher），已写入厂商配置 `DEFAULT_HOMEPAGE` |
 | 开机广告 | ✅ | `BOOT_AD=false` + `SUPPORT_SCREENSAVER=false` + `Need_CooCaa_Auto_Jump_Home=false` |
-| 自带桌面 | ✅ 已冻结 | `com.tianci.movieplatform`（含召回组件 `RecallBootReceiver`） |
-| 应用商店 | ✅ 已冻结 | `com.tianci.appstore` |
-| 紧急升级回灌 | ✅ 已阻断 | 禁用 `com.coocaa.skycast.tool` + hosts 屏蔽 `apk-sky-fs.coocaa.ottcn.com` |
-| 其它冗余 | ✅ 已禁用 | 电视管家 / 用户中心 / 语音 / 主题包 / 投屏工具等 11 项，全部可逆 |
+| 自带桌面 | ✅ 已卸载 | `com.tianci.movieplatform`（含召回组件 `RecallBootReceiver`） |
+| 应用商店 | ✅ 已卸载 | `com.tianci.appstore` |
+| 紧急升级回灌 | ✅ 已阻断 | 卸载 `com.coocaa.skycast.tool` + hosts 屏蔽 `apk-sky-fs.coocaa.ottcn.com` |
+| 其它冗余 | ✅ 已卸载 | 电视管家 / 用户中心 / 语音 / 主题包 / 定位 等，应用列表 45 → **33** 个 |
+| `/data` 空间 | ✅ | 519 MB → **1.2 GB**（+约 680 MB） |
 | 桌面备选 | ✅ | FLauncher 已装可用；LTvLauncher 在 API 22 上会崩溃（见 `docs/03-launcher.md`） |
 
 > ⚠️ 本项目不刷机、不解锁 bootloader、不改 boot 分区。系统分区只写入一个 `su` 文件和一份配置，
@@ -80,6 +81,13 @@ skyworth-8h52-root/
 │   ├── hi_boot_shell.sh    # 写入 U 盘的入口脚本
 │   ├── su.c / su           # setuid-root 源码与预编译二进制
 │   └── tasks/              # 以 init root 执行的脚本
+│   │   ├── 00_install_root.sh     # 装 su
+│   │   ├── 10_set_homepage.sh    # 换桌面 / 关广告
+│   │   ├── 20_debloat.sh         # 冻结冗余包
+│   │   ├── 30_block_upgrade.sh   # 阻断酷开紧急升级回灌
+│   │   ├── 40_uninstall_bloat.sh # 卸载冗余包 + 清 /data
+│   │   ├── 90_restore_stock.sh   # 回滚原厂
+│   │   └── 99_reboot.sh          # 一次性重启
 └── apk/README.md           # 第三方 APK 只给下载链接，不随仓库分发
 ```
 
@@ -170,10 +178,10 @@ cd tools
 | 7 | 首次 root | `setprop ctl.start boot-shell` | `/system/xbin/su` 装好，`su -c id` → `uid=0(root)` |
 | 8 | 换桌面配置 | `payload/tasks/10_set_homepage.sh` | 改 `/system/pcfg/.../general_config.xml` + `/data/ccos/general_config.xml` + `persist.service.homepage.*` |
 | 9 | 冻结酷开桌面 | `payload/tasks/20_debloat.sh` | `pm disable-user` 桌面/应用商店/管家/用户中心/语音等 |
-| 10 | 阻断回灌 | `payload/tasks/30_block_upgrade.sh` | 发现 `skycast.tool` 的 EmergencyUpgradeEngine 会重装桌面 → 冻结 + 删包 + hosts 屏蔽 |
-| 11 | 重启验收 | `reboot` + `dumpsys activity` | `mResumedActivity` = 目标桌面，root 仍在 |
-| 12 | 桌面选型 | 试装 LTvLauncher | API 22 崩溃（`NetworkStatsManager` API 23）→ 改用 AS Launcher |
-| 13 | 收尾 | 卸载旧桌面、禁用冗余包、导出 Jellyfin 配置 | 电视进入纯净状态 |
+| 10 | 阻断回灌 | `payload/tasks/30_block_upgrade.sh` | 发现 `skycast.tool` 的 EmergencyUpgradeEngine 会重装桌面 → 卸载 + 删包 + hosts 屏蔽 |
+| 11 | 真正卸载 | `payload/tasks/40_uninstall_bloat.sh` | 卸载 11 个冗余包 + 清 `/data` 残留，`/data` 空闲 519 MB → 1.2 GB |
+| 12 | 重启验收 | `payload/tasks/99_reboot.sh` | `mResumedActivity` = 目标桌面，root 仍在，应用数 45 → 33 |
+| 13 | 桌面选型 | 试装 LTvLauncher | API 22 崩溃（`NetworkStatsManager` API 23）→ 改用 AS Launcher |
 
 每一步都可以回滚，见 [`docs/04-recovery.md`](docs/04-recovery.md)。
 

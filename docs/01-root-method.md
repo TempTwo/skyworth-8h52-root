@@ -120,8 +120,9 @@ bounding set 只能减不能加，所以 setuid 出来的进程拿不到 `CAP_DA
    会从 `apk-sky-fs.coocaa.ottcn.com` 下载新版 `com.tianci.movieplatform` 并安装。
    必须禁用它 + hosts 屏蔽该域名，否则桌面每隔一段时间就被拉回来。
 6. **Desktop 卸载会回退到系统版**：`com.tianci.movieplatform` 在 `/data/app` 有更新版，
-   `/system/vendor/ccos/app/SkyMovie` 还有系统版。`pm uninstall` 会回退，
-   所以改用 `pm disable-user`（冻结），可随时 `pm enable` 恢复。
+   `/system/vendor/ccos/app/SkyMovie` 还有系统版。所以先 `pm disable-user` 冻结验证，
+   最终用 `pm uninstall --user 0`（对用户彻底移除，图标消失且无法被拉起），
+   需要时 `pm install-existing <pkg>` 即可恢复。
 
 ## 6. 关键命令速查
 
