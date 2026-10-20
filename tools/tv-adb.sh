@@ -57,6 +57,12 @@ if ! wait_device; then
     sleep 2
 fi
 
+# 二进制输出（如 screencap）不能走变量捕获，否则 NUL 字节会被吞掉
+if [[ "${1:-}" == "exec-out" ]]; then
+    adb -s "${DEVICE}" "$@"
+    exit $?
+fi
+
 # 带重试地执行命令
 attempt=1
 while true; do
