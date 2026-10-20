@@ -1,0 +1,6 @@
+.DS_Store
+*.apk
+!apk/README.md
+payload/*.o
+*.log
+__pycache__/
