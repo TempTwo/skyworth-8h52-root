@@ -251,7 +251,7 @@ index 2ff89fc..782b9a9 100644
              visible = overlay is Overlay.Wallpaper,
              onDismiss = { vm.overlay = Overlay.ControlCenter() },
 diff --git a/app/src/main/java/app/orchard/tv/ui/wallpaper/WallpaperSheet.kt b/app/src/main/java/app/orchard/tv/ui/wallpaper/WallpaperSheet.kt
-index f935e13..f54b3df 100644
+index f935e13..ac41123 100644
 --- a/app/src/main/java/app/orchard/tv/ui/wallpaper/WallpaperSheet.kt
 +++ b/app/src/main/java/app/orchard/tv/ui/wallpaper/WallpaperSheet.kt
 @@ -45,6 +45,7 @@ import androidx.compose.runtime.withFrameNanos
@@ -262,6 +262,15 @@ index f935e13..f54b3df 100644
  import androidx.compose.ui.focus.FocusRequester
  import androidx.compose.ui.graphics.Color
  import androidx.compose.ui.graphics.FilterQuality
+@@ -172,7 +173,7 @@ fun WallpaperSheet(visible: Boolean, onDismiss: () -> Unit, onStartScreensaver:
+                     WeatherLine()
+                     Spacer(Modifier.height(32.dp))
+                 }
+-                Spacer(Modifier.width(28.dp))
++                Spacer(Modifier.width(20.dp))
+                 PhoneCard(phoneUrl, qr)
+             }
+         }
 @@ -204,8 +205,10 @@ private fun WallpaperRows() {
          Spacer(Modifier.height(8.dp))
          // A row clips to its bounds, and the focused card grows by 8%: room on the left for that,
@@ -274,6 +283,31 @@ index f935e13..f54b3df 100644
              horizontalArrangement = Arrangement.spacedBy(18.dp),
              contentPadding = PaddingValues(start = 14.dp, end = 24.dp, top = 6.dp, bottom = 4.dp),
          ) {
+@@ -224,10 +227,10 @@ private fun WallpaperCard(wp: Wallpaper, focusRequester: FocusRequester?) {
+         value = withContext(Dispatchers.Default) { Wallpapers.thumbnail(wp.id)?.asImageBitmap() }
+     }
+     Pressable(onClick = { Wallpapers.select(wp.id) }, focusRequester = focusRequester, focusedScale = 1.08f) { state ->
+-        Column(Modifier.width(168.dp)) {
++        Column(Modifier.width(160.dp)) {
+             Box(
+                 Modifier
+-                    .size(168.dp, 94.dp)
++                    .size(160.dp, 90.dp)
+                     .clip(RoundedCornerShape(12.dp))
+                     .background(Palette.Fill)
+                     .border(
+@@ -397,9 +400,9 @@ private fun ScreensaverChoice(onStart: () -> Unit) {
+ 
+ @Composable
+ private fun PhoneCard(url: String?, qr: ImageBitmap?) {
+-    Column(Modifier.width(220.dp).padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
++    Column(Modifier.width(156.dp).padding(top = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+         Box(
+-            Modifier.size(176.dp).clip(RoundedCornerShape(18.dp)).background(Color.White).padding(14.dp),
++            Modifier.size(124.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).padding(12.dp),
+             contentAlignment = Alignment.Center,
+         ) {
+             if (qr != null) {
 diff --git a/app/src/main/res/values-zh/strings.xml b/app/src/main/res/values-zh/strings.xml
 index 16d3dcd..ef9a951 100644
 --- a/app/src/main/res/values-zh/strings.xml
