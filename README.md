@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | Root | ✅ | `/system/xbin/su`（setuid root，armeabi-v7a 静态二进制），重启后依然有效 |
 | Root（第二条通道，无需 U 盘） | ✅ | `coocaa_guard` 的 socket → `telnetd 4149`，**完整 capability**，见 [`docs/05-root-channels.md`](docs/05-root-channels.md) |
-| 开机自启桌面 | ✅ | **Aerial**（`app.orchard.tv`，tvOS 风格桌面，适配 Android 5.1），已写入厂商配置 `DEFAULT_HOMEPAGE` |
+| 开机自启桌面 | ✅ | **Aerial**（`app.orchard.tv`，tvOS 风格桌面，适配 Android 5.1），已写入厂商配置 `DEFAULT_HOMEPAGE`；改动以补丁形式留在本仓库，**不提交上游** |
 | 开机广告 | ✅ | `BOOT_AD=false` + `SUPPORT_SCREENSAVER=false` + `Need_CooCaa_Auto_Jump_Home=false` |
 | 自带桌面 | ✅ 已卸载 | `com.tianci.movieplatform`（含召回组件 `RecallBootReceiver`） |
 | 应用商店 | ✅ 已卸载 | `com.tianci.appstore` |
@@ -92,7 +92,8 @@ skyworth-8h52-root/
 │   ├── 02-debloat.md       # 精简清单与回滚方式
 │   ├── 03-launcher.md      # 桌面选型与兼容性分析
 │   ├── 04-recovery.md      # 救砖 / 还原原厂
-│   └── 05-root-channels.md # 第二条 root 通道（coocaa_guard socket）+ 厂商脚本修复
+│   ├── 05-root-channels.md # 第二条 root 通道（coocaa_guard socket）+ 厂商脚本修复
+│   └── 06-aerial-skyworth.md # Aerial 桌面的编译/接管/本机适配补丁说明
 ├── tools/
 │   ├── tv-adb.sh           # ADB 入口（自带 TCP 代理 + 断线重试）
 │   ├── tv-adb-proxy.py     # 127.0.0.1:15555 -> 192.168.0.9:5555 转发
@@ -118,6 +119,8 @@ skyworth-8h52-root/
 │       ├── 70_repair_and_set_home.sh # 修厂商脚本 + 装固化件 + 设默认桌面
 │       ├── 90_restore_stock.sh   # 回滚原厂
 │       └── 99_reboot.sh          # 一次性重启
+├── patches/               # 对第三方项目的本机改动（补丁形式，不往上游提交）
+│   └── aerial-8h52-adapt.patch  # Aerial 在创维 8H52_G3 上的适配
 └── apk/README.md           # 第三方 APK 只给下载链接，不随仓库分发
 ```
 
@@ -244,7 +247,8 @@ telnet 192.168.0.9 4149                             # root shell
 | 16 | 逆向守护进程 | 读 `coocaa_guard` | 找到 `/data/ccos/guard.sock` 明文协议与 `start_telnetd` → 拿到**完整 root**（不经 U 盘） |
 | 17 | 修复厂商脚本 | 完整 root | 去 CR 还原 + 补回 IPv6 hook，`sh -n` 通过，md5 与 `.fixed` 副本一致 |
 | 18 | 固化 | 装 `/system/xbin/guardctl` `/system/xbin/tvroot` | 重启后仍可取 root；**不加开机看门狗**，`init.bigfish.sh` 保持原样 |
-| 19 | 换 Aerial 桌面 | fork `pengchujin/aerial-tv` 自行编译 | tvOS 风格桌面，API 22 实测正常（渲染/焦点/航拍屏保/开机接管），见 `docs/03-launcher.md` |
+| 19 | 换 Aerial 桌面 | 基于 `pengchujin/aerial-tv` 自行编译 | tvOS 风格桌面，API 22 实测正常（渲染/焦点/航拍屏保/开机接管），见 `docs/03-launcher.md` |
+| 20 | 修 Aerial 两个 bug | 改上游源码 | 「应用信息」在这台没有 Settings 的电视上失效 → 自己做面板；个性化面板二维码压住左侧 → 裁剪壁纸行。补丁见 `patches/`，说明见 `docs/06-aerial-skyworth.md` |
 
 每一步都可以回滚，见 [`docs/04-recovery.md`](docs/04-recovery.md)。
 

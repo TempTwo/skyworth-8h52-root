@@ -15,3 +15,11 @@ adb install -r <apk>
 ```
 
 电视直连 192.168.0.9:5555 不通时，用 `tools/tv-adb.sh`（内含本地 TCP 代理）。
+
+## Aerial 桌面（当前使用的桌面）
+
+`app.orchard.tv`（Aerial，MIT）**不在本仓库分发**：它是基于上游
+<https://github.com/pengchujin/aerial-tv> 自己编译的，改动以补丁形式放在
+[`patches/aerial-8h52-adapt.patch`](../patches/aerial-8h52-adapt.patch)，
+编译与安装步骤见 [`docs/06-aerial-skyworth.md`](../docs/06-aerial-skyworth.md)。
+本机编译好的 APK 放在 `apk/aerial-standard-1.18-api22.apk`（被 .gitignore 排除，不入库）。
