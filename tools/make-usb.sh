@@ -90,20 +90,29 @@ echo "挂载点: $VOL"
 echo ">> 写入 payload"
 cp "$ROOT/payload/su" "$VOL/su"
 cp "$ROOT/payload/hi_boot_shell.sh" "$VOL/hi_boot_shell.sh"
+cp "$ROOT/payload/hisi_boot_shell.sh.fixed" "$VOL/hisi_boot_shell.sh.fixed"
+cp "$ROOT/payload/hisi_boot_shell.sh.orig" "$VOL/hisi_boot_shell.sh.orig"
+[ -f "$ROOT/tools/guardctl" ] && cp "$ROOT/tools/guardctl" "$VOL/guardctl"
 mkdir -p "$VOL/payload/tasks"
 cp -R "$ROOT/payload/tasks/." "$VOL/payload/tasks/"
 
 cat > "$VOL/README.txt" <<EOF
 创维 8H52_G3 启动 U 盘 (TVROOT)
 ================================
-su              : setuid root 二进制 (由 hi_boot_shell.sh 安装到 /system/xbin/su)
-hi_boot_shell.sh: 厂商 /system/bin/hisi_boot_shell.sh 会以 root source 本文件
-payload/tasks/  : 以 init root 执行的脚本 (通过 /data/local/tmp/pending_task.sh 调用)
+su                   : setuid root 二进制 (由 hi_boot_shell.sh 安装到 /system/xbin/su)
+hi_boot_shell.sh     : 厂商 /system/bin/hisi_boot_shell.sh 会以 root source 本文件
+                       每次运行会先检查厂商脚本，坏了自动去 CR 修复
+hisi_boot_shell.sh.fixed : 修好的厂商脚本（拷回 /system/bin 即可修复）
+hisi_boot_shell.sh.orig  : 厂商原版留底（纯 LF）
+guardctl             : 备用，通过 coocaa_guard 的 socket 下发 root 命令
+payload/tasks/       : 以 init root 执行的脚本 (通过 /data/local/tmp/pending_task.sh 调用)
 
 用法:
   1) 插入电视 USB 口
   2) adb shell 'setprop ctl.start boot-shell'
   3) adb shell 'cat /data/local/tmp/boot_task.log'
+
+注意: 传文件务必用 adb push，adb shell cat 会把 LF 变成 CRLF 把脚本写坏。
 EOF
 
 # 清理 macOS 元数据 & 保证脚本是 LF

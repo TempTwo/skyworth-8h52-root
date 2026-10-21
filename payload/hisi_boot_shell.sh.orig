@@ -1,0 +1,23 @@
+#!/system/bin/sh
+
+LOG_FILE="/data/log/boot_shell_log.txt"
+rm -rf "$LOG_FILE"
+IS_U_USING=`df | grep mnt/usb | busybox cut -f 1 -d " "`
+BOOT_SHELL_FILE=$IS_U_USING"/hi_boot_shell.sh"
+mkdir -p data/log
+if [ -n "$IS_U_USING" ];
+then
+    echo "--- usb device existed! ---" > "$LOG_FILE" 
+    if [ -f "$BOOT_SHELL_FILE" ];
+    then
+        echo "--- hi_boot_shell.sh file found! ---" >> "$LOG_FILE"
+        echo "*** hi_boot_shell.sh log start ***" >> "$LOG_FILE"
+        #logcat -c;logcat -s HiRMService > /data/log/HIRM.txt &
+        . "$BOOT_SHELL_FILE" 
+        echo "*** hi_boot_shell.sh log end ***" >> "$LOG_FILE"
+        sleep 3
+        am broadcast -a com.hisilicon.android.hiRMService.bootShellFinished
+    else
+        echo "--- hi_boot_shell.sh file not found in your usb device! ---" >> "$LOG_FILE"
+    fi
+fi

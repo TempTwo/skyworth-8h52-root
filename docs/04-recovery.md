@@ -8,6 +8,7 @@
 | --- | --- | --- |
 | ADB | 电视能开机 | shell 权限，可改 `/data/local/tmp`、触发 `boot-shell` |
 | `/system/xbin/su` | 已 Root | uid 0（能力有限，见 docs/01） |
+| `tvroot` / guardctl | 已 Root + 守护进程在跑 | **完整 root**（`CapEff=0x3fffffffff`），无需 U 盘 |
 | U 盘 + `boot-shell` | init 能跑到 `dev.bootcomplete=1` | 完整 root |
 | 工厂菜单 `com.coocaa.factory` | 遥控器组合键 | 恢复出厂 |
 
@@ -65,11 +66,45 @@ adb shell 'su -c "rm -f /system/xbin/su"'   # 需要可写 /system
 ./tools/tv-adb.sh shell '/system/xbin/su -c id'
 ```
 
+## 4.1 厂商 boot-shell 脚本被写坏（CRLF）
+
+症状：
+
+```sh
+sh -n /system/bin/hisi_boot_shell.sh
+# ...[11]: syntax error: 'if' unmatched
+```
+
+此时"插 U 盘开机拿 root"失效。用完整 root 通道修一次即可：
+
+```sh
+./tools/tv-adb.sh shell 'su -c "/system/xbin/tvroot"'   # 起 root telnet
+./tools/tv-root.py 'sh /data/local/tmp/repair.sh'       # 或直接执行修复命令
+```
+
+修复内容（详见 `docs/05-root-channels.md`）：
+
+```sh
+mount -o rw,remount /system
+cp /system/etc/hisi_boot_shell.sh.fixed /system/bin/hisi_boot_shell.sh
+chown 0:0 /system/bin/hisi_boot_shell.sh
+chmod 755 /system/bin/hisi_boot_shell.sh
+mount -o ro,remount /system
+sh -n /system/bin/hisi_boot_shell.sh    # 期望无输出
+```
+
+U 盘里的 `hi_boot_shell.sh` 也会在每次运行时自动做同样的自愈。
+
 ## 5. 关键文件位置
 
 | 文件 | 作用 |
 | --- | --- |
 | `/system/xbin/su` | setuid root 二进制 |
+| `/system/xbin/guardctl` | coocaa_guard socket 客户端（完整 root 通道） |
+| `/system/xbin/tvroot` | 一键起 root telnetd(4149) |
+| `/system/bin/hisi_boot_shell.sh` | 厂商 root 后门脚本（**已修为纯 LF**） |
+| `/system/etc/hisi_boot_shell.sh.fixed` | 修好的副本，坏了拷回去 |
+| `/system/etc/hisi_boot_shell.sh.orig` | 厂商原版留底（纯 LF） |
 | `/system/pcfg/8H52_G3/config/general_config.xml` | 厂商主配置（桌面/广告开关） |
 | `/data/ccos/general_config.xml` | 厂商运行时配置副本 |
 | `/system/etc/hosts` | 我们加的域名屏蔽 |

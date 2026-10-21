@@ -11,7 +11,8 @@
 | 项目 | 状态 | 说明 |
 | --- | --- | --- |
 | Root | ✅ | `/system/xbin/su`（setuid root，armeabi-v7a 静态二进制），重启后依然有效 |
-| 开机自启桌面 | ✅ | `com.oversea.aslauncher`（AS Launcher），已写入厂商配置 `DEFAULT_HOMEPAGE` |
+| Root（第二条通道，无需 U 盘） | ✅ | `coocaa_guard` 的 socket → `telnetd 4149`，**完整 capability**，见 [`docs/05-root-channels.md`](docs/05-root-channels.md) |
+| 开机自启桌面 | ✅ | `com.gathin.tvhome`（CleanYourTV 适配版），已写入厂商配置 `DEFAULT_HOMEPAGE` |
 | 开机广告 | ✅ | `BOOT_AD=false` + `SUPPORT_SCREENSAVER=false` + `Need_CooCaa_Auto_Jump_Home=false` |
 | 自带桌面 | ✅ 已卸载 | `com.tianci.movieplatform`（含召回组件 `RecallBootReceiver`） |
 | 应用商店 | ✅ 已卸载 | `com.tianci.appstore` |
@@ -56,6 +57,28 @@ U 盘 (FAT32)
 
 详细原理、能力边界与踩坑记录见 [`docs/01-root-method.md`](docs/01-root-method.md)。
 
+### 1.1 第二条通道：厂商 root 守护进程（不需要 U 盘）
+
+厂商的 `/system/vendor/bin/coocaa_guard` 本身就是一个 **root 守护进程**
+（`Uid: 0`，`CapEff: 0x3fffffffff`），它监听 `/data/ccos/guard.sock`，
+协议是明文单行：
+
+```
+shellexec <命令>      以 root 执行命令
+start_telnetd         启动 busybox telnetd -p 4149 -l /system/bin/sh（root）
+```
+
+`/data/ccos` 权限 0700 属主 system，所以用 `su`（有 `CAP_SETUID`）降权到 uid 1000 就能连上：
+
+```bash
+./tools/tv-adb.sh shell 'su -c "/system/xbin/tvroot"'   # 起 root telnetd
+telnet 192.168.0.9 4149                                # 进去就是 root shell
+```
+
+这条通道**不依赖 U 盘、不依赖开机流程**，重启后依然可用，
+是把"改 `/system`"这类需要完整 capability 的操作也变成随手可做的事。
+完整逆向过程与用法见 [`docs/05-root-channels.md`](docs/05-root-channels.md)。
+
 ---
 
 ## 2. 目录结构
@@ -68,26 +91,33 @@ skyworth-8h52-root/
 │   ├── 01-root-method.md   # 原理、能力边界、踩坑
 │   ├── 02-debloat.md       # 精简清单与回滚方式
 │   ├── 03-launcher.md      # 桌面选型与兼容性分析
-│   └── 04-recovery.md      # 救砖 / 还原原厂
+│   ├── 04-recovery.md      # 救砖 / 还原原厂
+│   └── 05-root-channels.md # 第二条 root 通道（coocaa_guard socket）+ 厂商脚本修复
 ├── tools/
 │   ├── tv-adb.sh           # ADB 入口（自带 TCP 代理 + 断线重试）
 │   ├── tv-adb-proxy.py     # 127.0.0.1:15555 -> 192.168.0.9:5555 转发
+│   ├── tv-root.py          # 通过 root telnetd(4149) 在电视上执行命令
 │   ├── make-usb.sh         # 一键格式化 U 盘并写入 payload
 │   ├── build-su.sh         # 交叉编译 ARMv7 静态 su
+│   ├── build-guardctl.sh   # 交叉编译 ARMv7 静态 guardctl（守护进程 socket 客户端）
+│   ├── guardctl.c / guardctl  # guardctl 源码与预编译二进制
 │   ├── patch-config.py     # 批量改厂商 general_config.xml
 │   ├── run-task.sh         # 把任务推到电视并通过 boot-shell 以 root 执行
 │   └── deploy.sh           # 一键：配置桌面 + 精简 + 校验
 ├── payload/
-│   ├── hi_boot_shell.sh    # 写入 U 盘的入口脚本
+│   ├── hi_boot_shell.sh    # 写入 U 盘的入口脚本（含自愈逻辑）
+│   ├── hisi_boot_shell.sh.orig  # 厂商 boot-shell 脚本原版留底（纯 LF）
+│   ├── hisi_boot_shell.sh.fixed # 修好的版本（纯 LF + IPv6 hook）
 │   ├── su.c / su           # setuid-root 源码与预编译二进制
 │   └── tasks/              # 以 init root 执行的脚本
-│   │   ├── 00_install_root.sh     # 装 su
-│   │   ├── 10_set_homepage.sh    # 换桌面 / 关广告
-│   │   ├── 20_debloat.sh         # 冻结冗余包
-│   │   ├── 30_block_upgrade.sh   # 阻断酷开紧急升级回灌
-│   │   ├── 40_uninstall_bloat.sh # 卸载冗余包 + 清 /data
-│   │   ├── 90_restore_stock.sh   # 回滚原厂
-│   │   └── 99_reboot.sh          # 一次性重启
+│       ├── 00_install_root.sh     # 装 su
+│       ├── 10_set_homepage.sh    # 换桌面 / 关广告
+│       ├── 20_debloat.sh         # 冻结冗余包
+│       ├── 30_block_upgrade.sh   # 阻断酷开紧急升级回灌
+│       ├── 40_uninstall_bloat.sh # 卸载冗余包 + 清 /data
+│       ├── 70_repair_and_set_home.sh # 修厂商脚本 + 装固化件 + 设默认桌面
+│       ├── 90_restore_stock.sh   # 回滚原厂
+│       └── 99_reboot.sh          # 一次性重启
 └── apk/README.md           # 第三方 APK 只给下载链接，不随仓库分发
 ```
 
@@ -141,7 +171,30 @@ cd tools
 
 ```bash
 cd tools
-./deploy.sh --homepage com.oversea.aslauncher/com.oversea.aslauncher.ui.main.MainActivity
+./deploy.sh --homepage com.gathin.tvhome/com.gathin.tvhome.MainActivity
+```
+
+### 3.6 不插 U 盘取 root（完整权限）
+
+```bash
+cd tools
+./build-guardctl.sh                                  # 编译 guardctl（已编译好可跳过）
+./tv-adb.sh push tools/guardctl /data/local/tmp/guardctl
+./tv-adb.sh shell 'chmod 755 /data/local/tmp/guardctl'
+./tv-adb.sh shell 'su -c "/data/local/tmp/guardctl --raw start_telnetd"'
+telnet 192.168.0.9 4149                             # root shell
+```
+
+或者用电视上已固化好的快捷方式：
+
+```bash
+./tools/tv-adb.sh shell 'su -c "/system/xbin/tvroot"'
+```
+
+在 root shell 里执行本机命令则用：
+
+```bash
+./tools/tv-root.py 'ls -l /system/xbin/'
 ```
 
 ---
@@ -151,15 +204,19 @@ cd tools
 `su` 虽然是 `uid=0`，但从 ADB 启动时继承的是 adbd 的 **capability bounding set = 0xc0**
 （只有 `CAP_SETUID` / `CAP_SETGID`），因此：
 
-| 操作 | `su -c` | boot-shell（init root） |
-| --- | --- | --- |
-| 改 `/system` 文件、remount rw | ❌ | ✅ |
-| 读 `/data/ccos`（700 system） | ❌ | ✅ |
-| `pm disable/uninstall` | ✅ | ✅ |
-| 删应用数据、写 `/data` | 部分 | ✅ |
-| `setprop` | ✅ | ✅ |
+| 操作 | `su -c` | boot-shell（init root） | guardctl/telnetd root |
+| --- | --- | --- | --- |
+| 改 `/system` 文件、remount rw | ❌ | ✅ | ✅ |
+| 读 `/data/ccos`（700 system） | ❌ | ✅ | ✅ |
+| `pm disable/uninstall` | ✅ | ✅ | ✅ |
+| 删应用数据、写 `/data` | 部分 | ✅ | ✅ |
+| `setprop` | ✅ | ✅ | ✅ |
 
-**结论**：日常用 `su`；涉及系统分区或厂商私有目录的改动一律走 `run-task.sh`（boot-shell）。
+**结论**：日常用 `su`；涉及系统分区或厂商私有目录的改动，
+走 `run-task.sh`（boot-shell，需 U 盘）或 `tvroot`（完整 root，无需 U 盘）。
+
+> ⚠️ 两条 root 通道都不要用来做超出"自家电视折腾"范围的事；
+> 尤其 `telnetd 4149` 是 root shell，用完请 `su -c "/system/xbin/guardctl --raw stop_telnetd"` 关掉。
 
 ---
 
@@ -182,6 +239,11 @@ cd tools
 | 11 | 真正卸载 | `payload/tasks/40_uninstall_bloat.sh` | 卸载 11 个冗余包 + 清 `/data` 残留，`/data` 空闲 519 MB → 1.2 GB |
 | 12 | 重启验收 | `payload/tasks/99_reboot.sh` | `mResumedActivity` = 目标桌面，root 仍在，应用数 45 → 33 |
 | 13 | 桌面选型 | 试装 LTvLauncher | API 22 崩溃（`NetworkStatsManager` API 23）→ 改用 AS Launcher |
+| 14 | 换新桌面 | 编译 CleanYourTV | `minSdk 26→22` + 脱糖 + 14 处 API 判断 → `com.gathin.tvhome`，写入 `DEFAULT_HOMEPAGE` |
+| 15 | **厂商脚本被写坏** | `adb shell cat` 备份 | CRLF 污染 `/system/bin/hisi_boot_shell.sh` → `boot-shell` 服务起不来，U 盘通道断掉 |
+| 16 | 逆向守护进程 | 读 `coocaa_guard` | 找到 `/data/ccos/guard.sock` 明文协议与 `start_telnetd` → 拿到**完整 root**（不经 U 盘） |
+| 17 | 修复厂商脚本 | 完整 root | 去 CR 还原 + 补回 IPv6 hook，`sh -n` 通过，md5 与 `.fixed` 副本一致 |
+| 18 | 固化 | 装 `/system/xbin/guardctl` `/system/xbin/tvroot` | 重启后仍可取 root；**不加开机看门狗**，`init.bigfish.sh` 保持原样 |
 
 每一步都可以回滚，见 [`docs/04-recovery.md`](docs/04-recovery.md)。
 
@@ -189,6 +251,10 @@ cd tools
 
 - 本仓库不包含任何厂商 APK、固件或解密密钥；`payload/su` 是本项目自写的 30 行 C。
 - 工具默认只在 `127.0.0.1` 开端口，U 盘里的脚本不含任何联网行为。
+- **`telnetd 4149` 只有 root 权限的用户该用**，用完请关掉：
+  `su -c "/system/xbin/guardctl --raw stop_telnetd"`。
+- 传文件一律用 `adb push` / `adb pull`；`adb shell cat` 会把 LF 转成 CRLF，
+  已经把厂商的 boot-shell 脚本写坏过一次（见 `docs/05-root-channels.md`）。
 - 使用前请先阅读 [`docs/04-recovery.md`](docs/04-recovery.md)，确保知道怎么退回去。
 
 ## 7. 致谢
