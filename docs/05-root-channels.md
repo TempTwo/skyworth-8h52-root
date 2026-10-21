@@ -179,7 +179,7 @@ adb push ./hisi_boot_shell.sh.fixed /data/local/tmp/  # ✅ 二进制
    `busybox md5sum` 与 `.fixed` 副本一致，`sh -n` 通过；
 3. `setprop ctl.start boot-shell` → 厂商脚本找到 U 盘 → source 我们的入口 →
    日志 `/data/local/tmp/boot_task.log` 显示 `uid=0(root)`；
-4. 重启后再验证：root 仍在、桌面仍是 `com.gathin.tvhome`、通道 B 仍可用。
+4. 重启后再验证：root 仍在、桌面仍是 `app.orchard.tv`（Aerial）、通道 B 仍可用。
 
 ## 5. 不做什么
 

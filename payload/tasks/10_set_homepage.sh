@@ -14,7 +14,7 @@ id
 
 TARGET=$(cat "$TARGET_FILE" 2>/dev/null)
 if [ -z "$TARGET" ]; then
-    TARGET="com.oversea.aslauncher/com.oversea.aslauncher.ui.main.MainActivity"
+    TARGET="app.orchard.tv/app.orchard.tv.MainActivity"
     echo "no target file, using default: $TARGET"
 else
     echo "target: $TARGET"

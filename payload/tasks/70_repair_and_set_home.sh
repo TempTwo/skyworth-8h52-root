@@ -87,8 +87,8 @@ if [ -f "$NEW" ]; then
     grep DEFAULT_HOMEPAGE "$CFG"
 fi
 
-setprop persist.service.homepage.pkg com.gathin.tvhome
-setprop persist.service.homepage.cls com.gathin.tvhome.MainActivity
+setprop persist.service.homepage.pkg app.orchard.tv
+setprop persist.service.homepage.cls app.orchard.tv.MainActivity
 setprop persist.service.starthomepage 1
 
 echo "=== repair task done ==="

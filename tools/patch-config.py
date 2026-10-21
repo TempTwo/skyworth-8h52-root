@@ -14,7 +14,7 @@
 
 示例:
     ./patch-config.py --pull --out /tmp/new.xml \\
-        --set DEFAULT_HOMEPAGE=com.oversea.aslauncher/com.oversea.aslauncher.ui.main.MainActivity
+        --set DEFAULT_HOMEPAGE=app.orchard.tv/app.orchard.tv.MainActivity
 """
 import argparse
 import re

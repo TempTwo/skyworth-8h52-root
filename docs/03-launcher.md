@@ -4,66 +4,106 @@
 
 | 桌面 | 包名 | 结果 |
 | --- | --- | --- |
-| **AS Launcher** ✅ | `com.oversea.aslauncher` | **采用**，已设为开机自启桌面 |
-| FLauncher | `me.efesser.flauncher` | 可用但界面朴素，按要求移除 |
-| LTvLauncher | `com.leanbitlab.ltvL` | API 22 上启动即崩，按要求移除 |
+| **Aerial** ✅ | `app.orchard.tv` | **采用**，已设为开机自启桌面（2026-10-21 起） |
+| CleanYourTV | `com.gathin.tvhome` | 备选，保留在系统里可随时切回 |
+| AS Launcher | `com.oversea.aslauncher` | 早期使用；现在被同名转发壳占位，入口仍指向 CleanYourTV |
+| FLauncher | `me.efesser.flauncher` | 可用但界面朴素，已移除 |
+| LTvLauncher | `com.leanbitlab.ltvL` | API 22 上启动即崩，已移除 |
 
-## 2. AS Launcher（当前使用）
+## 2. Aerial（当前使用）
 
-* 版本 `1.1.0.2`，`targetSdk=26`，ABI `armeabi-v7a`，在 Android 5.1 上运行正常。
-* 入口：`com.oversea.aslauncher/.ui.main.MainActivity`。
-* 中文界面、星空壁纸、常用应用区、桌面自带设置入口。
+tvOS 风格的 Android TV 桌面：时钟/天气/壁纸/应用网格、控制中心、航拍屏保、遥控器长按菜单。
+上游 <https://github.com/pengchujin/aerial-tv>（MIT），本机 fork：<https://github.com/TempTwo/aerial-tv>。
 
-设为开机自启需要同时改三处（缺一不可）：
+* 版本 `1.18`（versionCode 20），`minSdk 21`，Kotlin + Jetpack Compose 1.9.5。
+* 入口：`app.orchard.tv/.MainActivity`。
+* 本机适配说明（创维这台电视的 HOME 机制、权限、屏保、时钟）见 fork 里的
+  [`docs/devices/skyworth-8h52-g3.md`](https://github.com/TempTwo/aerial-tv/blob/main/docs/devices/skyworth-8h52-g3.md)。
+
+### 2.1 编译
+
+```bash
+git clone https://github.com/TempTwo/aerial-tv
+cd aerial-tv
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export ANDROID_HOME=~/Library/Android/sdk
+echo "sdk.dir=$ANDROID_HOME" > local.properties
+./gradlew assembleStandardRelease
+# 产物: app/build/outputs/apk/standard/release/app-standard-release.apk
+```
+
+需要 SDK Platform 36 + Build-Tools 36。上游的签名密钥在 `local/`（不在版本库），
+没有它会回落到本机 debug key —— 首次安装没问题，之后想覆盖安装就得一直用同一个 key。
+
+装 `standard` 版（带 HOME intent-filter）。这台电视的固件不拦带 HOME 的包，不需要 `guard` 版。
+
+### 2.2 设为开机桌面（关键：改厂商配置，不是改系统 HOME）
+
+创维的 HOME 由厂商自己的 `sky_launcher` 服务决定，它读配置里的 `DEFAULT_HOMEPAGE`：
 
 ```xml
-<!-- /system/pcfg/8H52_G3/config/general_config.xml 与 /data/ccos/general_config.xml -->
-<config name="DEFAULT_HOMEPAGE" value="com.oversea.aslauncher/com.oversea.aslauncher.ui.main.MainActivity"/>
+<!-- /system/pcfg/8H52_G3/config/general_config.xml 与 /data/ccos/general_config.xml 两处都要改 -->
+<config name="DEFAULT_HOMEPAGE" value="app.orchard.tv/app.orchard.tv.MainActivity"/>
 ```
 
 ```sh
-setprop persist.service.homepage.pkg com.oversea.aslauncher
-setprop persist.service.homepage.cls com.oversea.aslauncher.ui.main.MainActivity
+setprop persist.service.homepage.pkg app.orchard.tv
+setprop persist.service.homepage.cls app.orchard.tv.MainActivity
 setprop persist.service.starthomepage 1
 ```
 
-厂商开机流程每次都从配置里读 `DEFAULT_HOMEPAGE`，所以改配置即改开机桌面；
-属性只是为了运行期立刻生效。
-
-## 3. FLauncher（备选，MIT 开源）
-
-* 源码 <https://gitlab.com/flauncher/flauncher>，最新版本 0.18.0（2023-04，之后停更）。
-* Flutter 写的，API 21+ 可跑，是这台机器上最稳的开源桌面。
-* 想换回来的话：把 APK 装回去，再把 `DEFAULT_HOMEPAGE` 改回
-  `me.efesser.flauncher/me.efesser.flauncher.MainActivity`。
-
-## 4. LTvLauncher（高版本、人气旺，但本机不兼容）
-
-* 仓库 <https://github.com/leanbitlab-org/LtvLauncher>（≈400 star，2026-10 仍在更新），
-  提供 `armeabi-v7a` 包，APK 的 `minSdkVersion=21`，**按理应该能装**。
-* 实测安装成功，但一启动就崩：
+改完重启，`sky_launcher` 就会拉起它：
 
 ```
-E/AndroidRuntime: FATAL EXCEPTION: main
-java.lang.NoClassDefFoundError: Failed resolution of: Landroid/app/usage/NetworkStatsManager;
-    at b1.r.a(SourceFile:1)
-    at com.leanbitlab.ltvL.MainActivity.m(SourceFile:1)
-Caused by: ClassNotFoundException: Didn't find class "android.app.usage.NetworkStatsManager"
+I/sky_launcher: ----parser---- DEFAULT_HOMEPAGE:app.orchard.tv/app.orchard.tv.MainActivity
+I/ActivityManager: START u0 { cmp=app.orchard.tv/.MainActivity} from uid 0 on display 0
 ```
 
-`android.app.usage.NetworkStatsManager` 是 **API 23** 才有的类，电视是 API 22。
-这是上游的兼容性 bug（状态栏"流量统计"功能没做版本判断）。
+配置文件在 `/system` 里，写它要 root → 用 `tools/run-task.sh`（插 U 盘）或者
+`tools/tv-root.py`（guardctl 通道，不需要 U 盘）。
 
-想用的话有两条路：
+### 2.3 顺带要设的项
 
-1. **打补丁**：用 `apktool` 反编译 → 在 `b1/r.smali` 的方法入口加
-   `Build.VERSION.SDK_INT < 23` 判断 → 重打包签名；
-2. **改源码重编**：clone 仓库，在调 `NetworkStatsManager` 的 Java/Kotlin 侧加版本判断，
-   `flutter build apk --target-platform android-arm`（需要 Flutter SDK，minSdk 保持 21）。
+```sh
+# 开机后能自己弹到前台
+appops set app.orchard.tv SYSTEM_ALERT_WINDOW allow
+# 亮度调节
+appops set app.orchard.tv WRITE_SETTINGS allow
+# 系统屏保用航拍
+settings put secure screensaver_components app.orchard.tv/app.orchard.tv.dream.AerialDream
+```
 
-> 本仓库不内置被修改的第三方 APK，请自行按上述步骤处理。
+API 22 上没有运行时权限，`pm grant` 基本用不上（会报
+`It is required by the application`）；`WRITE_SECURE_SETTINGS` 是 signature 权限也改不了，
+但这台电视不用 Home Guard，所以不需要它。
 
-## 5. 其它备选（未安装）
+### 2.4 实测（2026-10-21，Android 5.1.1 / API 22）
 
-* Projectivy Launcher —— 界面最漂亮，但最低 API 要求高，5.1 基本无望。
-* ATV Launcher / Wolf Launcher —— 商业/小众，5.1 可用但资料少。
+| 项 | 结果 |
+| --- | --- |
+| `adb install` | ✅ 无校验链，直接装上 |
+| 开机自动接管 | ✅ 重启后 `mResumedActivity = app.orchard.tv/.MainActivity` |
+| 首页渲染 | ✅ 时钟、日期、天气、必应壁纸、应用网格 |
+| 遥控器焦点 | ✅ 方向键正常，滚下去时钟收进状态栏 |
+| 航拍屏保 | ✅ 能播，中文字幕正常 |
+| 崩溃 | ✅ 无（只有两条 `Unknown permission` 警告，API 22 不认识那两个权限） |
+
+**注意**：厂商 `/system/etc/init.bigfish.sh` 开机会把时间设成 2017-01-01，
+刚开机一两分钟桌面上的时钟是错的（8:00），联网后系统自己校回来。
+
+## 3. 备选：CleanYourTV（`com.gathin.tvhome`）
+
+* CleanYourTV 源码自行编译适配：`minSdk 26→22`、`compileSdk 35`、开启 core library desugaring、
+  14 处高版本 API 加版本判断、删除 19 个语言目录只留简体中文。
+* 入口：`com.gathin.tvhome/.MainActivity`。
+* 仍装在电视上（526 KB），想切回去只要把 `DEFAULT_HOMEPAGE` 改回
+  `com.gathin.tvhome/com.gathin.tvhome.MainActivity` 再重启。
+
+## 4. 历史：AS Launcher
+
+* 版本 `1.1.0.2`，`targetSdk=26`，ABI `armeabi-v7a`，在 Android 5.1 上运行正常。
+* 入口：`com.oversea.aslauncher/.ui.main.MainActivity`。
+* 现在这个包名被一个**同名转发壳**占着：壳启动后转跳到 `com.gathin.tvhome/.MainActivity` 再 finish，
+  用来在还不能写 `/system` 配置时先让厂商的 `sky_launcher` 跳到新桌面。
+* 厂商原版 AS Launcher 的 APK 留底在 `backup-tv/aslauncher-orig.apk`（15 MB）。
+  写了 `DEFAULT_HOMEPAGE` 之后这个壳已经没有用途，可以卸掉壳再把原版装回去（**需要确认后再做**）。

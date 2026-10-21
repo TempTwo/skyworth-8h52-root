@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | Root | ✅ | `/system/xbin/su`（setuid root，armeabi-v7a 静态二进制），重启后依然有效 |
 | Root（第二条通道，无需 U 盘） | ✅ | `coocaa_guard` 的 socket → `telnetd 4149`，**完整 capability**，见 [`docs/05-root-channels.md`](docs/05-root-channels.md) |
-| 开机自启桌面 | ✅ | `com.gathin.tvhome`（CleanYourTV 适配版），已写入厂商配置 `DEFAULT_HOMEPAGE` |
+| 开机自启桌面 | ✅ | **Aerial**（`app.orchard.tv`，tvOS 风格桌面，适配 Android 5.1），已写入厂商配置 `DEFAULT_HOMEPAGE` |
 | 开机广告 | ✅ | `BOOT_AD=false` + `SUPPORT_SCREENSAVER=false` + `Need_CooCaa_Auto_Jump_Home=false` |
 | 自带桌面 | ✅ 已卸载 | `com.tianci.movieplatform`（含召回组件 `RecallBootReceiver`） |
 | 应用商店 | ✅ 已卸载 | `com.tianci.appstore` |
@@ -171,7 +171,7 @@ cd tools
 
 ```bash
 cd tools
-./deploy.sh --homepage com.gathin.tvhome/com.gathin.tvhome.MainActivity
+./deploy.sh --homepage app.orchard.tv/app.orchard.tv.MainActivity
 ```
 
 ### 3.6 不插 U 盘取 root（完整权限）
@@ -244,6 +244,7 @@ telnet 192.168.0.9 4149                             # root shell
 | 16 | 逆向守护进程 | 读 `coocaa_guard` | 找到 `/data/ccos/guard.sock` 明文协议与 `start_telnetd` → 拿到**完整 root**（不经 U 盘） |
 | 17 | 修复厂商脚本 | 完整 root | 去 CR 还原 + 补回 IPv6 hook，`sh -n` 通过，md5 与 `.fixed` 副本一致 |
 | 18 | 固化 | 装 `/system/xbin/guardctl` `/system/xbin/tvroot` | 重启后仍可取 root；**不加开机看门狗**，`init.bigfish.sh` 保持原样 |
+| 19 | 换 Aerial 桌面 | fork `pengchujin/aerial-tv` 自行编译 | tvOS 风格桌面，API 22 实测正常（渲染/焦点/航拍屏保/开机接管），见 `docs/03-launcher.md` |
 
 每一步都可以回滚，见 [`docs/04-recovery.md`](docs/04-recovery.md)。
 

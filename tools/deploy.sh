@@ -1,7 +1,7 @@
 #!/bin/bash
 # 一键部署：改桌面配置 -> 精简 -> 阻断紧急升级 -> 校验
 #
-#   ./deploy.sh --homepage com.oversea.aslauncher/com.oversea.aslauncher.ui.main.MainActivity
+#   ./deploy.sh --homepage app.orchard.tv/app.orchard.tv.MainActivity
 #   ./deploy.sh                     # 使用默认桌面（AS Launcher）
 #
 # 前提：电视已插 U 盘，且 /system/xbin/su 已安装（首次请先跑 00_install_root.sh）
@@ -10,7 +10,7 @@ set -uo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${DIR}/.." && pwd)"
 ADB=("${DIR}/tv-adb.sh")
-HOMEPAGE="${HOMEPAGE:-com.oversea.aslauncher/com.oversea.aslauncher.ui.main.MainActivity}"
+HOMEPAGE="${HOMEPAGE:-app.orchard.tv/app.orchard.tv.MainActivity}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
