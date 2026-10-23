@@ -1,0 +1,209 @@
+#!/system/bin/sh
+
+# JD
+JDAPP="JD_TV"
+for jpp in $JDAPP
+do
+	if [ -f /data/$jpp.apk ];then
+		if [ "$(getprop ro.build.online.retailers)" == "JD" ];then
+			mkdir /data/app/$jpp
+			mv /data/$jpp.apk /data/app/$jpp/$jpp.apk
+			chown -R system:system /data/app/$jpp
+			chmod -R 755 /data/app/$jpp
+		else
+			rm /data/$jpp.apk
+		fi
+	fi
+done
+
+busybox date -s 201701010000.00
+NTFS32="/system/lib/modules/tntfs_hisilicon.ko"
+NTFS64="/system/lib64/modules/tntfs_hisilicon.ko"
+
+if [ ! -f "$NTFS64" ];then
+insmod $NTFS32
+else
+insmod $NTFS64
+fi
+
+#loostone
+if [ -f "/system/lib64/modules/pm_kara_release.ko" ];then
+insmod /system/lib64/modules/pm_kara_release.ko
+else
+insmod /system/lib/modules/pm_kara_release.ko
+fi
+
+#sh /system/bin/idong.thread.sh &
+sh /system/bin/installed_pkg_finder.sh &
+sh /system/bin/ChangeSdPermission.sh &
+#sh /system/bin/imi_chmod_permission.sh &
+sh /system/bin/drop_cache.sh &
+#sh /system/bin/tvplay_process.sh &
+
+#DVFS
+#Interactive
+#echo interactive > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+#echo 1000000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
+#echo 60000 > /sys/devices/system/cpu/cpufreq/interactive/timer_rate
+#echo 90 > /sys/devices/system/cpu/cpufreq/interactive/go_hispeed_load
+#echo 80 > /sys/devices/system/cpu/cpufreq/interactive/target_loads
+
+#Set cpu to performance mode during the boot stage
+#echo 1100000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
+#echo performance > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+
+#change skydir to system
+busybox find /skydir | busybox xargs chown system:system 
+chmod 0551 /skydir/ 
+chmod -R 0555 /skydir/config /skydir/menu /skydir/plugins /skydir/voice 
+chmod -R 0777 /skydir/lib /skydir/extra /skydir/sharefiles
+
+chmod -R 0755 /data/flash
+chown system:system  /data/flash
+chown system:system /data/flash/skydb.db
+
+rm -rf /data/tmp/*
+rm -rf /data/skyshm/*
+
+echo 2 >/proc/irq/106/smp_affinity
+
+pm_ddr=`getprop persist.sys.DDR.SelfRefresh`
+if [ $pm_ddr = true ];then
+echo 1 > /proc/msp/pm_ddr
+fi
+
+#echo 0 > /sys/module/mali/parameters/mali_dvfs_enable
+#echo 432000 1100 > /proc/msp/pm_gpu
+
+    echo 540000 > /sys/module/mali/parameters/mali_dvfs_max_freqency
+#CSR Porting Begin
+insmod /system/lib/modules/bt_usb32.ko
+#CSR Porting End
+
+#ADD BT
+insmod /system/lib/modules/btusb.ko
+#END BT
+
+# USB CAM
+if [ -f /system/lib64/modules/usbcimodule.ko ]; then
+   insmod /system/lib64/modules/usbcimodule.ko
+   mknod /dev/cimodule_command0 c 180 192
+   mknod /dev/cimodule_media0 c 180 208
+   chmod 666 /dev/cimodule_command0
+   chmod 666 /dev/cimodule_media0
+fi
+
+# Add swp instruction support, for compatibility (cts/apps/...)
+if [ `getprop persist.sys.cts.enable` = true ]; then
+echo 1 > /proc/sys/abi/swp
+fi
+
+if [ `getprop persist.sys.bvsswitch` = 0 ]; then
+   echo "===persist.sys.bvsswitch =0" > /dev/ttyAMA0
+   setprop persist.sys.bootvideo.mute 0   
+fi 
+
+# for prebuilt apk
+if [ ! -f /data/system/packages.xml -o -d /data/pre-app ]; then
+	echo "First boot!!! " > /data/pre_app.log
+	echo "Waiting for boot complete..." >> /data/pre_app.log
+	cnt=0
+	while [ -z `getprop dev.bootcomplete` ]; do
+		let cnt=cnt+1
+		echo "Waiting for boot ${cnt}s..." >> /data/pre_app.log
+		sleep 1;
+	done
+
+	sleep 3
+
+	echo "Install prebuilt apks..." >> /data/pre_app.log
+	cnt=0;
+	for I in `busybox find /data/pre-app -name "*.apk"`
+	do
+                echo "installing $I ..." >> /data/pre_app.log
+		pm install -r $I
+		let cnt=cnt+1
+		sleep 1
+	done
+	busybox rm -rf /data/pre-app
+	echo "Done. Installed $cnt apks." >> /data/pre_app.log
+fi
+
+rm /data/misc/dhcp/*
+rm /dev/hi_png
+./system/bin/hidraw_daemon_absolute_3751 &
+#for CooCaa5.0
+#do not write in init.xxx.rc 
+	/system/bin/boa &
+
+# for miracast hdcp key init
+#sleep 15
+#if [ -f /atv/db/hdcpkey.bin ]; then
+#	sample_hdcp_burn /atv/db/hdcpkey.bin
+#	echo 1 > /atv/db/hdcpinited
+#	rm /atv/db/hdcpkey.bin
+#        sync
+#fi
+
+#Wait until the Android system boot completed.
+while [ -z `getprop dev.bootcomplete`]; do
+        sleep 0.3;
+done
+
+#Print the boot time
+boot_time=`cat /proc/uptime | busybox awk '{print $1}'`
+echo "=================  Android Boot completed: (time: ${boot_time}s)  ================" > /dev/ttyAMA0
+
+#chmod /dev/pm* for loostone
+chmod 644 /dev/pm*
+
+if [ `getprop ro.product.name` = sky_v551_64bit_H7_2layer ]; then
+        echo 20 > /proc/pm/core_volt_weighting
+        echo 20 > /proc/pm/cpu_volt_weighting
+elif [ `getprop ro.product.name` = Sky_V551_64bit_U3_2layer ]; then
+        echo 0 > /proc/pm/core_volt_weighting
+        echo 0 > /proc/pm/cpu_volt_weighting
+else
+        echo 10 > /proc/pm/core_volt_weighting
+        echo 10 > /proc/pm/cpu_volt_weighting
+fi
+
+
+#Change refresh rate for cts.
+if [ `getprop persist.sys.cts.enable` = true ]; then
+        echo 1 > /proc/sys/abi/swp
+	echo fixrate 2 > /proc/msp/panel
+else
+	echo "not cts mode" > /data/cts.log
+fi
+
+#if [ `getprop ro.build.skymodel` = 8H52 ]; then
+# echo "=================  8H52 SET VBO 0x492  ================" > /dev/ttyAMA0
+# himm 0xff08811c 0x492
+#fi 
+
+if [ `getprop persist.sys.log.enable` = false ]; then
+    echo "=================  close kernel print  ================" > /dev/ttyAMA0
+    echo 1 > /proc/sys/kernel/printk
+fi 
+
+#OptimizedBoot: change mode 20s delay for data/app laterscan and startup.
+sleep 20
+#Set cpu to ondemand mode, as the normal mode.
+echo 1100000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq
+echo interactive > /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor
+echo 100000 > /sys/devices/system/cpu/cpufreq/interactive/timer_rate
+#yiye add for 
+#mkdir /tmp/freezer
+#mount -t cgroup -o freezer none /tmp/freezer
+#mkdir /tmp/freezer/FROZEN
+#chmod 666 //tmp/freezer/FROZEN/{freezer.state,tasks}
+#yiye cgroup for 30%
+mkdir /dev/cpuctl/cpu30
+echo 30000> /dev/cpuctl/cpu30/cpu.cfs_quota_us
+#脏数据回写到emmc的时间，默认为500*1/HZ:V553为1000-->5s将脏页写入emmc
+echo 5000 > /proc/sys/vm/dirty_writeback_centisecs
+#2s将写缓冲区的数据写会到emmc
+echo 2000 > /proc/sys/vm/dirty_expire_centisecs
+
+
