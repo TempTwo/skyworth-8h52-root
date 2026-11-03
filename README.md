@@ -295,7 +295,7 @@ settings put secure screensaver_components \
 每次插着 U 盘开机（或每逢您用 `setprop ctl.start boot-shell` 触发）自动：
 
 1. 配静态 IP（厂商的静态 IP 配置依赖被精简的"软设置"App，不配 adb 就连不上）；
-2. 修/校验厂商 boot-shell 脚本（防 CRLF 污染，见 §5 第 2 条）；
+2. 修/校验厂商 boot-shell 脚本（防 CRLF 污染，见 §6 第 2 条）；
 3. 装 `su`（setuid root）；
 4. 装 U 盘上的 `aerial.apk` 并把 `DEFAULT_HOMEPAGE` 指过去；
 5. 清理悬空包记录（避免 PackageManager 追着不存在的 APK 使开机卡 logo）；
@@ -319,7 +319,72 @@ U 盘"**。时钟补丁也一样，重跑 80 号任务即可：
 
 ---
 
-## 5. 操作红线（每一条都是踩坑人的真金白银）
+## 5. 精简：可禁用 / 可卸载应用列表
+
+> **顺序建议**：先 `disable-user` 禁用观察几天 → 确认无异常再 `uninstall`。
+> 所有操作可逆：禁用恢复了 `pm enable`；卸载恢复 `pm install-existing`。
+> 完整背景与取舍见 [`docs/02-debloat.md`](docs/02-debloat.md)。
+
+### 5.1 可禁用，确认后再卸载（酷开推广/劫持类）
+
+| 包名 | 是什么 | 建议 |
+| --- | --- | --- |
+| `com.tianci.movieplatform` | 酷开桌面/影视（含开机召回组件 `RecallBootReceiver`） | 卸载（已换第三方桌面） |
+| `com.tianci.appstore` | 自带应用商店（推广/下载入口） | 卸载 |
+| `com.coocaa.skycast.tool` | **会偷偷重装酷开桌面的"紧急升级"组件** | 彻底卸载（它只有 /data 一份） |
+| `com.coocaa.tvmanager` | 电视管家（清理/推广入口） | 卸载 |
+| `com.tianci.user` | 用户中心（登录/推广） | 卸载 |
+| `com.skyworth.angel.voice` | 语音助手（误触发、常驻后台） | 卸载 |
+| `com.coocaa.theme_package_ccos_nine` | 酷开主题包 | 卸载 |
+
+### 5.2 可禁用/卸载的无用系统小组件
+
+| 包名 | 是什么 | 建议 |
+| --- | --- | --- |
+| `com.android.htmlviewer` | HTML 查看器（无界面浏览器壳） | 卸载 |
+| `com.android.backupconfirm` | 备份确认对话框 | 卸载 |
+| `com.android.sharedstoragebackup` | 共享存储备份代理 | 卸载 |
+| `com.android.location.fused` | 融合定位（无 GPS 的电视） | 卸载 |
+
+### 5.3 **不要动**的包（动了轻则丢功能，重则变砖）
+
+| 包名 | 原因 |
+| --- | --- |
+| `com.tianci.system` / `com.coocaa.os.ccosservice` / `com.coocaa.sky.ccapi` | 厂商核心服务，**禁用=开机起不来** |
+| `com.tianci.de` | 桌面环境服务，系统 UI 依赖 |
+| `com.coocaa.os.softsettings` / `com.skyworth.setting` | 系统设置 |
+| `com.skyworth.tianciime` | 输入法（Jellyfin 等需要） |
+| `com.tianci.tv` / `com.tianci.localmedia` | 电视信号输入 / 本地媒体 |
+| `com.coocaa.factory` | 工厂菜单，**留着当救命通道** |
+| 所有 `com.hisilicon.*` | 厂商驱动层 |
+
+**铁律**：酷开系包大多共享 `android.uid.system`（uid 1000）签名组，
+**删除这类包里的 APK 文件会使整组签名校验失效 → 变砖**（见 §6 红线 1）。
+对它们只用 `disable-user`/`uninstall --user 0`，永远不要删 `/system` 分区里的 APK。
+
+### 5.4 操作命令
+
+```sh
+# 禁用（可逆，不动 APK）
+adb shell 'pm disable-user --user 0 com.tianci.appstore'
+adb shell 'pm enable com.tianci.appstore'          # 恢复
+
+# 卸载（对当前用户；系统原版 APK 仍在 /system，可恢复）
+adb shell 'pm uninstall --user 0 com.tianci.appstore'
+adb shell 'pm install-existing com.tianci.appstore'  # 恢复系统原版
+
+# 纯第三方包（只有 /data 一份）：pm uninstall 即彻底删除
+
+./tools/tv-adb.sh shell 'pm list packages -d'      # 看当前被冻结的
+```
+
+（一条命令批量执行用 `./tools/run-task.sh payload/tasks/20_debloat.sh`，
+之后 `40_uninstall_bloat.sh` 真卸载并清 /data 残留；效果：应用 45 → 33、
+/data 空闲 519 MB → 1.2 GB。）
+
+---
+
+## 6. 操作红线（每一条都是踩坑人的真金白银）
 
 以下都是**真实事故换来的**，请当纪律而不是建议：
 
@@ -343,7 +408,7 @@ U 盘"**。时钟补丁也一样，重跑 80 号任务即可：
 
 ---
 
-## 6. 目录结构
+## 7. 目录结构
 
 ```text
 skyworth-8h52-root/
@@ -378,7 +443,7 @@ skyworth-8h52-root/
 
 ---
 
-## 7. 安全与合规
+## 8. 安全与合规
 
 * 本仓库不包含任何厂商 APK、固件或解密密钥；`payload/su` 是本项目自写的 30 行 C。
 * 工具默认只在本机 `127.0.0.1` 开端口；U 盘脚本不含任何联网行为。
@@ -388,11 +453,11 @@ skyworth-8h52-root/
 
 ---
 
-## 8. 致谢
+## 9. 致谢
 
 * 厂商固件自带的 `hisi_boot_shell.sh`（未修改，仅利用其既有行为）
 * [Aerial (pengchujin/aerial-tv)](https://github.com/pengchujin/aerial-tv) —— 上游桌面；
   本机的二次修改版见 [TempTwo/aerial-tv-skyworth](https://github.com/TempTwo/aerial-tv-skyworth)
 * [walkman-tv](https://github.com/SincereXing/walkman-tv) 等开源 TV 项目
 * [FLauncher](https://gitlab.com/flauncher/flauncher)、CleanYourTV —— 桌面备选
-* 本文 §5 红线的每一条，都来自把事故写成文档的自觉 —— 愿每个动手的人先读再动
+* 本文 §6 红线的每一条，都来自把事故写成文档的自觉 —— 愿每个动手的人先读再动
