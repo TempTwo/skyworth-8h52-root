@@ -72,20 +72,26 @@ busybox sh /system/etc/timesync.sh &
 
 ## 回滚
 
+改 `/system` 需要完整 root：**U 盘 boot-shell 通道**（`run-task.sh`），不依赖 U 盘的
+guard/tvroot 通道在这版固件上已失效，见下方括号说明与仓库 README §2.4。
+
 ```sh
-./tools/tv-root.py 'sh /data/local/tmp/repair-clock.sh'   # 或 boot-shell 任务
-# 内容：
+# 把下面内容存为 /data/local/tmp/uninstall-clock-task.sh 再 run-task.sh 执行
 #   mount -o rw,remount /system
 #   cp /data/local/tmp/init.bigfish.sh.bak /system/etc/init.bigfish.sh
 #   rm -f /system/etc/timesync.sh
 #   chown 0:0 /system/etc/init.bigfish.sh; chmod 755 /system/etc/init.bigfish.sh
 #   mount -o ro,remount /system
+
+./tools/run-task.sh /data/local/tmp/uninstall-clock-task.sh
 ```
 
-（`/data/ccos/guard.sock` 在这版固件已改名：抽象 socket
-`coocaa_guard_ctrl_cmd`，客户端必须用 24 字节地址长度连
-`tools/gaddr.c`；`/system/bin/skybusybox` 缺失导致 guard 的
-`start_telnetd`/`shellexec` 目前不可用，通道 B 暂时只剩下值班命令。）
+> 固件版本注记（2026-10-23，V020.006.110 实测）：厂商守护进程
+> `coocaa_guard` 已改用抽象 socket `coocaa_guard_ctrl_cmd`
+> （客户端需 24 字节地址长度，见 `tools/gaddr.c`），旧路径
+> `/data/ccos/guard.sock` 不存在；且 `/system/bin/skybusybox` 缺失导致
+> guard 的 `start_telnetd`/`shellexec` 静默失败——**"不插 U 盘的完整
+> root 通道"已不可用，改 /system 一律走 U 盘 boot-shell**。
 
 ## 风险与边界
 

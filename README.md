@@ -203,49 +203,39 @@ root telnetd（完整 capability）。**2026-10-23 在 V020.006.110 上实测：
 
 ### 3.1 目前采用的桌面
 
-**Aerial**（tvOS 风格：大时钟/农历/天气/壁纸/应用网格/控制中心/航拍屏保/
-遥控器长按菜单）：
+**Aerial**（tvOS 风格：大时钟/天气/壁纸/应用网格/控制中心/航拍屏保/
+遥控器长按菜单）——**适配源码与可安装包都在并提供 Releases**：
+[pengchujin/aerial-tv](https://github.com/pengchujin/aerial-tv)（上游，MIT）
+→ 二次修改版 [TempTwo/aerial-tv-skyworth](https://github.com/TempTwo/aerial-tv-skyworth)：
 
-* 上游：[pengchujin/aerial-tv](https://github.com/pengchujin/aerial-tv)（MIT）
-* 适配 fork：[TempTwo/aerial-tv](https://github.com/TempTwo/aerial-tv)、
-  本仓库 `patches/aerial-8h52-adapt.patch`（相对上游 main 的 diff，含两处
-  机型 bug 修复：无 Settings 时的「应用信息」自绘面板；个性化面板二维码
-  与壁纸行重叠，**均未提上游**）
-* 电视上当前装的是 **1.20（versionCode 22）**，`standard` flavor（带 HOME
-  intent-filter）。
+* Releases 提供**可直接 `adb install` 的 APK**（`aerial-skyworth-8h52-v1.20.apk`、
+  `v1.21.apk`，均已在创维 8H52_G3 实测），与上游同一个签名 key，`-r` 可覆盖升级；
+* v1.21 新增：无 Key 多源天气（移植 Quiet TV）、时钟直取系统时间；
+  v1.20 为和风天气 + 联网校时，**电视上当前运行 1.20**；
+* 适配内容：无系统 Settings 时的「应用信息」自绘面板、个性化面板二维码与
+  壁纸行重叠修复、创维背光控制等（详见该仓库 README）。
 
-* 备选桌面（历史选择，均实测过）：CleanYourTV（自适配到 API 22）可用但已卸载、
-  FLauncher 可用但界面朴素、LTvLauncher **API 22 上启动即崩**。
+备选桌面（历史实测，仅作参考）：CleanYourTV（自适配到 API 22）可用但已卸载、
+FLauncher 可用但界面朴素、LTvLauncher **API 22 上启动即崩**（不推荐）。
 
-| 桌面 | 结论 |
-| --- | --- |
-| Aerial | ✅ 用了，稳定、渲染/焦点/屏保全通过 |
-| CleanYourTV（自适配 API22） | 可用，备选 |
-| FLauncher | 可用但朴素 |
-| LTvLauncher | ❌ API 22 上启动即崩 |
+### 3.2 安装（下载 APK）或编译
 
-### 3.2 编译
+**推荐直接用 Releases**：
 
 ```bash
-git clone https://github.com/TempTwo/aerial-tv
-cd aerial-tv
-git checkout skyworth-8h52-adapt    # 本机分支（或从上游打 patches/ 里的补丁）
-export JAVA_HOME=$(/usr/libexec/java_home -v 17)
-export ANDROID_HOME=~/Library/Android/sdk
-echo "sdk.dir=$ANDROID_HOME" > local.properties
-./gradlew assembleStandardRelease
-# 产物: app/build/outputs/apk/standard/release/app-standard-release.apk
+curl -LO https://github.com/TempTwo/aerial-tv-skyworth/releases/latest/download/aerial-skyworth-8h52-v1.21.apk
+./tools/tv-adb.sh push aerial-skyworth-8h52-v1.21.apk /data/local/tmp/aerial.apk
+./tools/tv-adb.sh shell 'pm install -r /data/local/tmp/aerial.apk'          # 覆盖升级保数据
+# 电视上的版本比 APK 高时（需降级）改用：pm install -r -d ...
+./tools/tv-adb.sh shell 'cmd package compile -m speed -f app.orchard.tv'   # AOT 提速，务必做
 ```
 
-需要 SDK Platform 36 + Build-Tools 36。**没有原签名 key 时首轮就用本机 debug key
-装上去，之后覆盖安装必须一直用同一个 key**（否则 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`）。
-
-装到电视（**降级保数据**——电视版本比 APK 新时用 `-r -d`，数据不丢）：
+要自己编译就 clone 适配仓库（编译参数见其 README）：
 
 ```bash
-./tools/tv-adb.sh push app-standard-release.apk /data/local/tmp/aerial.apk
-./tools/tv-adb.sh shell 'pm install -r -d /data/local/tmp/aerial.apk'
-./tools/tv-adb.sh shell 'cmd package compile -m speed -f app.orchard.tv'  # AOT 提速，务必做
+git clone https://github.com/TempTwo/aerial-tv-skyworth
+cd aerial-tv-skyworth
+# 需要 SDK Platform 36 + Build-Tools 36；签名 key 说明见该仓库 README
 ```
 
 ### 3.3 设为开机桌面（关键：改厂商配置，不是改系统 HOME）
@@ -369,8 +359,7 @@ skyworth-8h52-root/
 │   ├── su.c / su              # setuid-root 源码（30 行 C）与预编译
 │   └── tasks/                 # 以 init root 执行的任务（见 §4.3）
 ├── patches/                   # 对第三方项目的本机补丁（不提上游）
-│   ├── aerial-8h52-adapt.patch
-│   └── walkman-tv-api22.patch
+│   └── walkman-tv-api22.patch  # （Aerial 的适配已独立成 TempTwo/aerial-tv-skyworth）
 ├── tools/
 │   ├── tv-adb.sh              # ADB 唯一入口（本地转发+重试）
 │   ├── tv-adb-proxy.py        # 127.0.0.1:15555 -> 电视:5555
@@ -380,7 +369,8 @@ skyworth-8h52-root/
 │   ├── build-su.sh / build-guardctl.sh   # 交叉编译小工具（zig/clang）
 │   ├── cleanup-*.sh           # 精简/清理工具（匹配逻辑已修正）
 │   ├── gaddr.c                # guard 抽象 socket 客户端（仅历史参考，见 §2.4）
-│   └── tv-root.py             # guardctl 通道助手（现在的固件上不可用，存档）
+│   ├── inkeys.c / root-run.sh / rescue-recovery.sh 等   # 调试留档工具
+│   ├── tv-root.py             # guardctl 通道助手（现在的固件上不可用，存档）
 └── apk/README.md              # 第三方 APK 只给链接不随仓库分发（版权原因）
 ```
 
@@ -399,7 +389,8 @@ skyworth-8h52-root/
 ## 8. 致谢
 
 * 厂商固件自带的 `hisi_boot_shell.sh`（未修改，仅利用其既有行为）
-* [Aerial (pengchujin/aerial-tv)](https://github.com/pengchujin/aerial-tv)、
-  [walkman-tv](https://github.com/walkman-tools/walkman-tv) 等开源 TV 项目
+* [Aerial (pengchujin/aerial-tv)](https://github.com/pengchujin/aerial-tv) —— 上游桌面；
+  本机的二次修改版见 [TempTwo/aerial-tv-skyworth](https://github.com/TempTwo/aerial-tv-skyworth)
+* [walkman-tv](https://github.com/SincereXing/walkman-tv) 等开源 TV 项目
 * [FLauncher](https://gitlab.com/flauncher/flauncher)、CleanYourTV —— 桌面备选
 * 本文 §5 红线的每一条，都来自把事故写成文档的自觉 —— 愿每个动手的人先读再动

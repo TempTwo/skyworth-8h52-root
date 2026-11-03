@@ -4,3 +4,6 @@
 payload/*.o
 *.log
 __pycache__/
+
+# 二进制工具
+tools/inkeys
