@@ -7,9 +7,7 @@
 
 > ## ⚠️ WARN：ROOT 有风险，动手前先读完这篇
 >
-> 1. **ROOT 有风险，可能变砖**。这不是吓唬人：本项目作者就曾因清理脚本匹配逻辑
->    写错、误删 25 个已安装系统 APK，电视卡死在 logo，靠 recovery 整包刷原厂固件
->    才救回（见 [`docs/08-brick-recovery.md`](docs/08-brick-recovery.md)）。
+> 1. **ROOT 有风险，可能变砖**。
 > 2. Root 会**失去保修**，且会被厂商判定为非正常使用产品。
 > 3. Root 会把电视的攻击面扩大（远程 ADB、root 任务通道都可能被人利用），
 >    **家庭共享网络上不要随意开启 root 调试通道**，用完必须关闭。
@@ -33,10 +31,6 @@
 | 有利条件 | `ro.secure=1` 但 SELinux 关闭 → setuid 生效；厂商出厂自带 root 后门 |
 
 其他机型没有专门适配，只能参考思路，方案细节固件相关，风险自担。
-
-本方案在这台电视上验证时的固件历程：出厂 V022 → 误删事故后整包刷回
-V017.012.060 → 自动 OTA 升到 **V020.006.110**，全部兼容；下文有一处由固件
-版本导致的差异（guard 通道，见 2.4）。
 
 ---
 
@@ -87,10 +81,6 @@ V017 是这个机芯系列**唯一能从官方 CDN 下载到的版本**（即使
 5. 等 10～20 分钟，**中途别断电、别拔盘**；完成后选「重启」。
 6. 重启后若 U 盘里还插着本仓库的启动盘，root/桌面/时钟补丁会自动重新装上（见 §4）。
 
-> 一个官方包里的小坑：V017 的 `updater-script` 会因为包里缺 `skyworth.img`
-> 在中途 abort，但 **`/system` 分区在那之前（L27）已刷完**，救砖目的
-> 已达成；recovery/atv/factory 分区不动（本来也没坏）。
-> 详见 [`docs/08-brick-recovery.md`](docs/08-brick-recovery.md)。
 
 ### 1.3 我想彻底回到没 Root 的出厂状态
 
@@ -212,13 +202,6 @@ root telnetd（完整 capability）。**2026-10-23 在 V020.006.110 上实测：
 
 * Releases 提供**可直接 `adb install` 的 APK**（`aerial-skyworth-8h52-v1.20.apk`、
   `v1.21.apk`，均已在创维 8H52_G3 实测），与上游同一个签名 key，`-r` 可覆盖升级；
-* v1.21 新增：无 Key 多源天气（移植 Quiet TV）、时钟直取系统时间；
-  v1.20 为和风天气 + 联网校时，**电视上当前运行 1.20**；
-* 适配内容：无系统 Settings 时的「应用信息」自绘面板、个性化面板二维码与
-  壁纸行重叠修复、创维背光控制等（详见该仓库 README）。
-
-备选桌面（历史实测，仅作参考）：CleanYourTV（自适配到 API 22）可用但已卸载、
-FLauncher 可用但界面朴素、LTvLauncher **API 22 上启动即崩**（不推荐）。
 
 ### 3.2 安装（下载 APK）或编译
 
@@ -415,7 +398,6 @@ skyworth-8h52-root/
 ├── README.md                  # 本篇
 ├── docs/
 │   ├── 02-debloat.md          # 精简清单/冻结清单/回滚
-│   ├── 07-walkman-tv.md       # 第三方音乐播放器 API 22 适配实录
 │   ├── 08-brick-recovery.md   # 变砖事故复盘 + 原厂固件包详解（§1 救砖的依据）
 │   └── 09-clock-sync.md       # 开机自动校时补丁（免手动 date -s）
 ├── payload/
@@ -455,9 +437,4 @@ skyworth-8h52-root/
 
 ## 9. 致谢
 
-* 厂商固件自带的 `hisi_boot_shell.sh`（未修改，仅利用其既有行为）
-* [Aerial (pengchujin/aerial-tv)](https://github.com/pengchujin/aerial-tv) —— 上游桌面；
-  本机的二次修改版见 [TempTwo/aerial-tv-skyworth](https://github.com/TempTwo/aerial-tv-skyworth)
-* [walkman-tv](https://github.com/SincereXing/walkman-tv) 等开源 TV 项目
-* [FLauncher](https://gitlab.com/flauncher/flauncher)、CleanYourTV —— 桌面备选
 * 本文 §6 红线的每一条，都来自把事故写成文档的自觉 —— 愿每个动手的人先读再动
