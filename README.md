@@ -12,8 +12,7 @@
 | --- | --- | --- |
 | Root | ✅ | `/system/xbin/su`（setuid root，armeabi-v7a 静态二进制），重启后依然有效 |
 | Root（第二条通道，无需 U 盘） | ✅ | `coocaa_guard` 的 socket → `telnetd 4149`，**完整 capability**，见 [`docs/05-root-channels.md`](docs/05-root-channels.md) |
-| 开机自启桌面 | ✅ | **Aerial**（`app.orchard.tv`，tvOS 风格桌面，适配 Android 5.1），已写入厂商配置 `DEFAULT_HOMEPAGE`；改动以补丁形式留在本仓库，**不提交上游** |
-| 音乐播放器 | ✅ | **随便听 walkman-tv**（`com.walkman.tv`，Compose for TV，内置酷我/网易云/酷狗/QQ音乐），已适配到 API 22 并实测播放正常，见 `docs/07-walkman-tv.md` |
+| 开机自启桌面 | ✅ | **Aerial**（`app.orchard.tv`，tvOS 风格桌面，适配 Android 5.1），已写入厂商配置 `DEFAULT_HOMEPAGE`；|
 | 开机广告 | ✅ | `BOOT_AD=false` + `SUPPORT_SCREENSAVER=false` + `Need_CooCaa_Auto_Jump_Home=false` |
 | 自带桌面 | ✅ 已卸载 | `com.tianci.movieplatform`（含召回组件 `RecallBootReceiver`） |
 | 应用商店 | ✅ 已卸载 | `com.tianci.appstore` |
