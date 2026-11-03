@@ -1,37 +1,113 @@
-# Skyworth 8H52_G3 (Hi3751V551) Root 工具箱
+# 创维 8H52_G3（Hi3751V551）Root 与桌面替换指南
 
-针对创维 `8H52_G3` / `Hi3751V551` / Android 5.1.1 (API 22) 电视的免解锁 Root、精简与桌面替换工具。
-请在AI指导下执行，ROOT有风险，操作请谨慎！
+针对创维 `8H52_G3` / 海思 `Hi3751V551` / Android 5.1.1（API 22）电视的
+免解锁 Root、桌面替换与开机自动化工具箱。所有步骤在实物上完整验证过。
 
-**已在本机完整验证**：Root ✅ ｜ 换桌面 ✅ ｜ 去开机广告 ✅ ｜ 精简应用 ✅ ｜ 开机自启桌面 ✅
-
----
-
-## 0. 成果一览
-
-| 项目 | 状态 | 说明 |
-| --- | --- | --- |
-| Root | ✅ | `/system/xbin/su`（setuid root，armeabi-v7a 静态二进制），重启后依然有效 |
-| Root（第二条通道，无需 U 盘） | ✅ | `coocaa_guard` 的 socket → `telnetd 4149`，**完整 capability**，见 [`docs/05-root-channels.md`](docs/05-root-channels.md) |
-| 开机自启桌面 | ✅ | **Aerial**（`app.orchard.tv`，tvOS 风格桌面，适配 Android 5.1），已写入厂商配置 `DEFAULT_HOMEPAGE`；|
-| 开机广告 | ✅ | `BOOT_AD=false` + `SUPPORT_SCREENSAVER=false` + `Need_CooCaa_Auto_Jump_Home=false` |
-| 自带桌面 | ✅ 已卸载 | `com.tianci.movieplatform`（含召回组件 `RecallBootReceiver`） |
-| 应用商店 | ✅ 已卸载 | `com.tianci.appstore` |
-| 紧急升级回灌 | ✅ 已阻断 | 卸载 `com.coocaa.skycast.tool` + hosts 屏蔽 `apk-sky-fs.coocaa.ottcn.com` |
-| 其它冗余 | ✅ 已卸载 | 电视管家 / 用户中心 / 语音 / 主题包 / 定位 等，应用列表 45 → **33** 个 |
-| `/data` 空间 | ✅ | 519 MB → **1.2 GB**（+约 680 MB） |
-| 桌面备选 | ✅ | FLauncher 已装可用；LTvLauncher 在 API 22 上会崩溃（见 `docs/03-launcher.md`） |
-
-> ⚠️ 本项目不刷机、不解锁 bootloader、不改 boot 分区。系统分区只写入一个 `su` 文件和一份配置，
-> 任何一步都可以通过 `docs/04-recovery.md` 的方法回滚。
+> ## ⚠️ WARN：ROOT 有风险，动手前先读完这篇
+>
+> 1. **ROOT 有风险，可能变砖**。这不是吓唬人：本项目作者就曾因清理脚本匹配逻辑
+>    写错、误删 25 个已安装系统 APK，电视卡死在 logo，靠 recovery 整包刷原厂固件
+>    才救回（见 [`docs/08-brick-recovery.md`](docs/08-brick-recovery.md)）。
+> 2. Root 会**失去保修**，且会被厂商判定为非正常使用产品。
+> 3. Root 会把电视的攻击面扩大（远程 ADB、root 任务通道都可能被人利用），
+>    **家庭共享网络上不要随意开启 root 调试通道**，用完必须关闭。
+> 4. 只对**自己有处置权的电视**操作；是别人/全家人在用的电视，先征得同意，
+>    任何会动用户数据的步骤（恢复出厂、清 /data）加倍谨慎。
+> 5. 本仓库**不刷机、不解锁 bootloader、不改 boot 分区**；但任何第三方工具链
+>    都无法给"不会变砖"打保票——厂商 OTA、固件差异、手滑都可能出事。
+> 6. **开始之前，先读第 1 节"救砖"**，把原厂固件包下下来留底再动手。
+> 7. 一切后果**自行承担**——你操作，你负责。
 
 ---
 
-## 1. Root 原理（一句话）
+## 0. 适用机型
 
-这台机器的 `init.rc` 里留着厂商自用的 **root 后门服务**：
+| 项 | 值 |
+| --- | --- |
+| 型号 | 创维 8H52_G3 |
+| SoC | Hi3751V551 |
+| Android | 5.1.1（API 22），ABI armeabi-v7a（仅 32 位） |
+| SELinux | **Disabled**（本方案成立的前提，`getenforce` 实测确认） |
+| 有利条件 | `ro.secure=1` 但 SELinux 关闭 → setuid 生效；厂商出厂自带 root 后门 |
+
+其他机型没有专门适配，只能参考思路，方案细节固件相关，风险自担。
+
+本方案在这台电视上验证时的固件历程：出厂 V022 → 误删事故后整包刷回
+V017.012.060 → 自动 OTA 升到 **V020.006.110**，全部兼容；下文有一处由固件
+版本导致的差异（guard 通道，见 2.4）。
+
+---
+
+## 1. 先读：万一搞崩了，怎么救
+
+### 1.1 恢复阶梯（由轻到重）
+
+| 症状 | 处理 |
+| --- | --- |
+| 换的桌面不好用/进不去，想回原厂 | `./tools/run-task.sh ./payload/tasks/90_restore_stock.sh`（恢复厂商配置 + 启回原桌面） |
+| Root 失效了（OTA 覆盖了 `/system`） | 重新 `make-usb.sh` 做盘 → 插电视 → `setprop ctl.start boot-shell` 重新装 su |
+| 误删文件后开机异常，但系统还能进 | 停手。用任务通道把备份恢复回去（**删除前必须做过备份**） |
+| **卡 logo / 无法开机** | ↓ 整包刷原厂固件（1.2） |
+
+### 1.2 变砖恢复：recovery 刷原厂固件（已实测，2 小时救回）
+
+**固件来源**（2026-11-03 实测可用，632 MB，HTTP 200）：
 
 ```
+http://update01.skyworth-cloud.com/pup/8H52_G3_V017.012.060_9_online.zip
+```
+
+下载要点（这个 CDN 在家宽/有代理的网络下 DNS 解析常被干扰，建议照下法直连 IP）：
+
+```bash
+# 用 8.8.8.8 解析 CDN 真实 IP，然后直连（部分网络下反而更快，也可能不通，多试几个 IP）
+dig +short update01.skyworth-cloud.com.cdn20.com @8.8.8.8   # 任选一个返回的 IP
+curl -o fw.zip --resolve update01.skyworth-cloud.com:80:<CDN_IP> \
+     http://update01.skyworth-cloud.com/pup/8H52_G3_V017.012.060_9_online.zip
+```
+
+> 若是最常见的家用 OpenClash 场景，注意它常见 fake-IP 响应（`198.18.x.x`），
+> 此时直接 `curl` 会"解析"到一个不存在的地址。**用 `--resolve`** 指定真实 CDN IP。
+
+V017 是这个机芯系列**唯一能从官方 CDN 下载到的版本**（即使电视出厂是
+更新的版本号），同板号同机芯，足以把 `/system` 整个恢复成原厂；电视会随后
+自动 OTA 升回能拿到的最新版。命名规律与包内容解析见
+[`docs/08-brick-recovery.md`](docs/08-brick-recovery.md)。
+
+**操作步骤**：
+
+1. U 盘（**FAT32**）根目录放固件包，**两个文件名都放一份**，recovery 只认这两个：
+   * `update.zip`（改名固件包）
+   * `8H52_G3.zip`（本板专属名，recovery 按板号找）
+2. Mac 上**先推出 U 盘**（macOS 挂着时电视读不到）；电视**断电**（非待机）插上 U 盘；
+3. 插回电源，**立刻长按遥控器「主页/Home」键**不放，直到出 recovery 菜单；
+4. 选 **「使用U盘或SD卡升级」**；
+5. 等 10～20 分钟，**中途别断电、别拔盘**；完成后选「重启」。
+6. 重启后若 U 盘里还插着本仓库的启动盘，root/桌面/时钟补丁会自动重新装上（见 §4）。
+
+> 一个官方包里的小坑：V017 的 `updater-script` 会因为包里缺 `skyworth.img`
+> 在中途 abort，但 **`/system` 分区在那之前（L27）已刷完**，救砖目的
+> 已达成；recovery/atv/factory 分区不动（本来也没坏）。
+> 详见 [`docs/08-brick-recovery.md`](docs/08-brick-recovery.md)。
+
+### 1.3 我想彻底回到没 Root 的出厂状态
+
+```bash
+./tools/run-task.sh ./payload/tasks/90_restore_stock.sh   # 配置/包/hosts 全部还原
+./tools/tv-adb.sh shell 'su -c "rm -f /system/xbin/su"'   # 删 su（REMOVE_SU=1 分支也做）
+```
+
+或直接走 1.2 整包刷回（最彻底，数据也清）。
+
+---
+
+## 2. Root
+
+### 2.1 原理（厂商自留的后门，不 patch boot 分区）
+
+厂商出厂脚本 `/system/bin/hisi_boot_shell.sh` 由 init 以 **root** 启动：
+
+```text
 service boot-shell /system/bin/hisi_boot_shell.sh
     class core
     user root
@@ -42,233 +118,288 @@ on property:dev.bootcomplete=1
     start boot-shell
 ```
 
-`/system/bin/hisi_boot_shell.sh` 会扫描 `df | grep mnt/usb`，找到 U 盘后**以 root 身份 source
-U 盘根目录下的 `hi_boot_shell.sh`**。也就是说：**插上 U 盘 = 拿到 init 上下文的 root**。
+脚本逻辑概括：`df | grep mnt/usb` 找 U 盘 → **以 root 身份 source U 盘根目录的
+`hi_boot_shell.sh`**。所以：**插上 U 盘 = init 上下文的完整 root**，且不用拆机、
+不用解锁、不改 boot 分区。
 
-本仓库把这条链路做成了标准流程：
+本仓库把它做成标准链路：
 
-```
+```text
 U 盘 (FAT32)
- ├── su                # ARMv7 静态 setuid-root 二进制
- ├── hi_boot_shell.sh  # 厂商脚本 source 的入口
- └── payload/tasks/*.sh # 需要以 init root 执行的任务
+ ├── su (ARMv7 静态 setuid-root 二进制, payload/su.c 源码)
+ ├── hi_boot_shell.sh (入口: 修静态 IP → 装 su → 任务调度 → 自愈)
+ └── payload/tasks/*.sh (要 init root 执行的任务)
 ```
 
-配合 ADB 侧 `setprop ctl.start boot-shell` 可以在**不重启**的情况下随时触发一次 root 任务。
+触发方式两种：**插着 U 盘开机**（init 自动跑）或**已开机时
+`setprop ctl.start boot-shell`**（不重启电视也能触发，普通 shell 用户可写 `ctl.*`）。
 
-详细原理、能力边界与踩坑记录见 [`docs/01-root-method.md`](docs/01-root-method.md)。
-
-### 1.1 第二条通道：厂商 root 守护进程（不需要 U 盘）
-
-厂商的 `/system/vendor/bin/coocaa_guard` 本身就是一个 **root 守护进程**
-（`Uid: 0`，`CapEff: 0x3fffffffff`），它监听 `/data/ccos/guard.sock`，
-协议是明文单行：
-
-```
-shellexec <命令>      以 root 执行命令
-start_telnetd         启动 busybox telnetd -p 4149 -l /system/bin/sh（root）
-```
-
-`/data/ccos` 权限 0700 属主 system，所以用 `su`（有 `CAP_SETUID`）降权到 uid 1000 就能连上：
-
-```bash
-./tools/tv-adb.sh shell 'su -c "/system/xbin/tvroot"'   # 起 root telnetd
-telnet 192.168.0.9 4149                                # 进去就是 root shell
-```
-
-这条通道**不依赖 U 盘、不依赖开机流程**，重启后依然可用，
-是把"改 `/system`"这类需要完整 capability 的操作也变成随手可做的事。
-完整逆向过程与用法见 [`docs/05-root-channels.md`](docs/05-root-channels.md)。
-
----
-
-## 2. 目录结构
-
-```
-skyworth-8h52-root/
-├── README.md
-├── LICENSE
-├── docs/
-│   ├── 01-root-method.md   # 原理、能力边界、踩坑
-│   ├── 02-debloat.md       # 精简清单与回滚方式
-│   ├── 03-launcher.md      # 桌面选型与兼容性分析
-│   ├── 04-recovery.md      # 救砖 / 还原原厂
-│   ├── 05-root-channels.md # 第二条 root 通道（coocaa_guard socket）+ 厂商脚本修复
-│   ├── 06-aerial-skyworth.md # Aerial 桌面的编译/接管/本机适配补丁说明
-│   └── 07-walkman-tv.md  # 随便听音乐播放器的 API 22 适配与实测
-├── tools/
-│   ├── tv-adb.sh           # ADB 入口（自带 TCP 代理 + 断线重试）
-│   ├── tv-adb-proxy.py     # 127.0.0.1:15555 -> 192.168.0.9:5555 转发
-│   ├── tv-root.py          # 通过 root telnetd(4149) 在电视上执行命令
-│   ├── make-usb.sh         # 一键格式化 U 盘并写入 payload
-│   ├── build-su.sh         # 交叉编译 ARMv7 静态 su
-│   ├── build-guardctl.sh   # 交叉编译 ARMv7 静态 guardctl（守护进程 socket 客户端）
-│   ├── guardctl.c / guardctl  # guardctl 源码与预编译二进制
-│   ├── patch-config.py     # 批量改厂商 general_config.xml
-│   ├── run-task.sh         # 把任务推到电视并通过 boot-shell 以 root 执行
-│   └── deploy.sh           # 一键：配置桌面 + 精简 + 校验
-├── payload/
-│   ├── hi_boot_shell.sh    # 写入 U 盘的入口脚本（含自愈逻辑）
-│   ├── hisi_boot_shell.sh.orig  # 厂商 boot-shell 脚本原版留底（纯 LF）
-│   ├── hisi_boot_shell.sh.fixed # 修好的版本（纯 LF + IPv6 hook）
-│   ├── su.c / su           # setuid-root 源码与预编译二进制
-│   └── tasks/              # 以 init root 执行的脚本
-│       ├── 00_install_root.sh     # 装 su
-│       ├── 10_set_homepage.sh    # 换桌面 / 关广告
-│       ├── 20_debloat.sh         # 冻结冗余包
-│       ├── 30_block_upgrade.sh   # 阻断酷开紧急升级回灌
-│       ├── 40_uninstall_bloat.sh # 卸载冗余包 + 清 /data
-│       ├── 70_repair_and_set_home.sh # 修厂商脚本 + 装固化件 + 设默认桌面
-│       ├── 90_restore_stock.sh   # 回滚原厂
-│       └── 99_reboot.sh          # 一次性重启
-├── patches/               # 对第三方项目的本机改动（补丁形式，不往上游提交）
-│   ├── aerial-8h52-adapt.patch   # Aerial 在创维 8H52_G3 上的适配
-│   └── walkman-tv-api22.patch  # walkman-tv 降到 API 22 的适配
-└── apk/README.md           # 第三方 APK 只给下载链接，不随仓库分发
-```
-
----
-
-## 3. 快速开始
-
-### 3.1 准备（一次性）
+### 2.2 上手步骤（已验证）
 
 ```bash
 cd tools
-./build-su.sh          # 编译 ARMv7 静态 su（有 zig / clang 任意一个即可）
-```
+./make-usb.sh                  # 做 U 盘：自动识别外置磁盘，FAT32+MBR，卷标 TVROOT
+                               # ⚠️ 会清空该 U 盘
 
-### 3.2 制作启动 U 盘
-
-```bash
-cd tools
-./make-usb.sh                  # 自动识别外置可移动磁盘
-./make-usb.sh --disk /dev/disk5 # 或手动指定
-```
-
-脚本会：把磁盘格式化成 **FAT32 + MBR**（卷标 `TVROOT`）→ 写入 `su` / `hi_boot_shell.sh` / `payload` → 安全弹出。
-> 会清空该 U 盘，请勿指向 Mac 内置盘。
-
-### 3.3 首次 Root
-
-1. U 盘插到电视 USB 口，确认电视已挂载（电视上 `df | grep mnt/usb`）。
-2. 在电脑上：
-
-```bash
-cd tools
+# U 盘插到电视 USB 口；确认电视已挂载：df | grep mnt/usb
 ./tv-adb.sh shell 'setprop ctl.start boot-shell'
-./tv-adb.sh shell 'cat /data/local/tmp/boot_task.log'   # 查看 root 任务日志
-./tv-adb.sh shell '/system/xbin/su -c id'              # 期望 uid=0(root)
+./tv-adb.sh shell 'busybox tail -30 /data/local/tmp/boot_task.log'   # 看任务日志
+./tv-adb.sh shell '/system/xbin/su -c id'                            # 期望 uid=0(root)
 ```
 
-3. Root 成功后 `/system/xbin/su` 永久存在，重启不丢。
+Root 成功后 `/system/xbin/su` 固化在 `/system` 里，重启不丢（直到 OTA 覆盖）。
 
-### 3.4 执行任意 root 任务
+之后起任务全走统一入口（不重启执行一条命令）：
 
 ```bash
 cd tools
-./run-task.sh ../payload/tasks/20_debloat.sh      # 推送并以 init root 执行
+./run-task.sh ../payload/tasks/20_debloat.sh   # 推到 /data/local/tmp/pending_task.sh
+                                               # → 推 U 盘 → 触发 boot-shell → 打印日志
 ```
 
-`run-task.sh` 会自动：推送任务到 `/data/local/tmp/pending_task.sh` → 推送 U 盘入口 → 触发
-`boot-shell` → 打印 `/data/local/tmp/boot_task.log`。
+### 2.3 能力边界（重要：为什么有的命令 su 会 Permission denied）
 
-### 3.5 换桌面 / 精简（一条命令）
+`su` 是 uid 0，但从 ADB 起的进程继承 adbd 的 capability bounding set（实测
+`CapBnd: 0xc0` = 只有 SETUID/SETGID）。bounding set 只能减不能加，因此：
+
+| 操作 | ADB `su -c` | U 盘 boot-shell（init root） |
+| --- | --- | --- |
+| 改 `/system` 文件、remount rw | ❌ | ✅ |
+| 读 `/data/ccos`（0700 system） | ❌ | ✅ |
+| `pm disable-user` / `pm uninstall --user 0` | ✅ | ✅ |
+| `setprop persist.*` | ✅ | ✅ |
+| 删应用数据 / 全 /data | 部分 | ✅ |
+
+**结论**：日常操作（冻结包、设属性、装应用）用 `su` 就够；**涉及系统分区或
+厂商私有目录的改动（比如换桌面、打时钟补丁）必须走 U 盘 boot-shell**，即
+`./tools/run-task.sh <task>`。
+
+### 2.4 guard 通道的历史（旧文件提到，现已在该固件上失效，别踩）
+
+本仓库早期文档介绍过第二条 root 通道：厂商守护进程
+`coocaa_guard` 监听 socket、用 `tools/guardctl`/`/system/xbin/tvroot` 无 U 盘触发
+root telnetd（完整 capability）。**2026-10-23 在 V020.006.110 上实测：**
+
+* `/data/ccos/guard.sock` 已不存在（守护进程改成了抽象 socket，名字变了），
+  旧客户端 `guardctl`/`tvroot` 连不上（代码仍留在仓库，仅作历史记录）；
+* 守护进程改用抽象 socket 后的连接姿势见 `tools/gaddr.c`
+  （说明见 [`docs/09-clock-sync.md`](docs/09-clock-sync.md)），但如今也只对
+  输入事件类命令有用；
+* `start_telnetd`/`shellexec` 因系统里缺 `/system/bin/skybusybox` 而静默失败。
+
+**结论：这条通道现已用不了，唯一完整 root 是 U 盘 boot-shell**（反而更保险，
+不依赖厂商守护进程的版本变动，V017/V020 两个固件都实测可用）。
+`tools/gaddr.c` 是当时逆向出的抽象 socket 客户端，仅为参考留档。
+
+### 2.5 ADB 连不上时
+
+`adb root` 不可用（`ro.secure=1`，adbd 重启回 shell 用户）。macOS 直连电视
+5555 可能被路由策略拦：用 `tools/tv-adb-proxy.py`
+（127.0.0.1:15555 → 电视:5555 本地转发）绕过。
+
+---
+
+## 3. 换桌面（Aerial）
+
+### 3.1 目前采用的桌面
+
+**Aerial**（tvOS 风格：大时钟/农历/天气/壁纸/应用网格/控制中心/航拍屏保/
+遥控器长按菜单）：
+
+* 上游：[pengchujin/aerial-tv](https://github.com/pengchujin/aerial-tv)（MIT）
+* 适配 fork：[TempTwo/aerial-tv](https://github.com/TempTwo/aerial-tv)、
+  本仓库 `patches/aerial-8h52-adapt.patch`（相对上游 main 的 diff，含两处
+  机型 bug 修复：无 Settings 时的「应用信息」自绘面板；个性化面板二维码
+  与壁纸行重叠，**均未提上游**）
+* 电视上当前装的是 **1.20（versionCode 22）**，`standard` flavor（带 HOME
+  intent-filter）。
+
+* 备选桌面（历史选择，均实测过）：CleanYourTV（自适配到 API 22）可用但已卸载、
+  FLauncher 可用但界面朴素、LTvLauncher **API 22 上启动即崩**。
+
+| 桌面 | 结论 |
+| --- | --- |
+| Aerial | ✅ 用了，稳定、渲染/焦点/屏保全通过 |
+| CleanYourTV（自适配 API22） | 可用，备选 |
+| FLauncher | 可用但朴素 |
+| LTvLauncher | ❌ API 22 上启动即崩 |
+
+### 3.2 编译
 
 ```bash
-cd tools
-./deploy.sh --homepage app.orchard.tv/app.orchard.tv.MainActivity
+git clone https://github.com/TempTwo/aerial-tv
+cd aerial-tv
+git checkout skyworth-8h52-adapt    # 本机分支（或从上游打 patches/ 里的补丁）
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export ANDROID_HOME=~/Library/Android/sdk
+echo "sdk.dir=$ANDROID_HOME" > local.properties
+./gradlew assembleStandardRelease
+# 产物: app/build/outputs/apk/standard/release/app-standard-release.apk
 ```
 
-### 3.6 不插 U 盘取 root（完整权限）
+需要 SDK Platform 36 + Build-Tools 36。**没有原签名 key 时首轮就用本机 debug key
+装上去，之后覆盖安装必须一直用同一个 key**（否则 `INSTALL_FAILED_UPDATE_INCOMPATIBLE`）。
+
+装到电视（**降级保数据**——电视版本比 APK 新时用 `-r -d`，数据不丢）：
 
 ```bash
-cd tools
-./build-guardctl.sh                                  # 编译 guardctl（已编译好可跳过）
-./tv-adb.sh push tools/guardctl /data/local/tmp/guardctl
-./tv-adb.sh shell 'chmod 755 /data/local/tmp/guardctl'
-./tv-adb.sh shell 'su -c "/data/local/tmp/guardctl --raw start_telnetd"'
-telnet 192.168.0.9 4149                             # root shell
+./tools/tv-adb.sh push app-standard-release.apk /data/local/tmp/aerial.apk
+./tools/tv-adb.sh shell 'pm install -r -d /data/local/tmp/aerial.apk'
+./tools/tv-adb.sh shell 'cmd package compile -m speed -f app.orchard.tv'  # AOT 提速，务必做
 ```
 
-或者用电视上已固化好的快捷方式：
+### 3.3 设为开机桌面（关键：改厂商配置，不是改系统 HOME）
 
-```bash
-./tools/tv-adb.sh shell 'su -c "/system/xbin/tvroot"'
+创维的 HOME 由厂商 `sky_launcher` 服务按配置里的 `DEFAULT_HOMEPAGE` 决定，
+**两处配置都要改**（一处在 `/system` 里，需要 U 盘 boot-shell 通道）：
+
+```xml
+<!-- /system/pcfg/8H52_G3/config/general_config.xml 与 /data/ccos/general_config.xml -->
+<config name="DEFAULT_HOMEPAGE" value="app.orchard.tv/app.orchard.tv.MainActivity"/>
 ```
 
-在 root shell 里执行本机命令则用：
+```sh
+setprop persist.service.homepage.pkg app.orchard.tv
+setprop persist.service.homepage.cls app.orchard.tv.MainActivity
+setprop persist.service.starthomepage 1
+```
+
+`./tools/run-task.sh ../payload/tasks/10_set_homepage.sh` 一条命令做全套。
+验证：`adb shell dumpsys window | grep mResumedActivity` 应看到
+`app.orchard.tv/.MainActivity`。
+
+顺带设置（API 22 无运行时权限，appops/settings 这些能用）：
+
+```sh
+appops set app.orchard.tv SYSTEM_ALERT_WINDOW allow    # 开机后自己弹到前台
+appops set app.orchard.tv WRITE_SETTINGS allow         # 亮度调节
+settings put secure screensaver_components \
+    app.orchard.tv/app.orchard.tv.dream.AerialDream    # 系统屏保指向 Aerial
+```
+
+### 3.4 开机广告同关（deploy.sh 顺带做）
+
+改 `general_config.xml`：`BOOT_AD=false`、`SUPPORT_SCREENSAVER=false`、
+`Need_CooCaa_Auto_Jump_Home=false`。跑
+`./tools/deploy.sh --homepage app.orchard.tv/app.orchard.tv.MainActivity`
+一键完成 3.3 + 3.4 + 精简（见 [docs/02-debloat.md](docs/02-debloat.md)）。
+
+### 3.5 原厂桌面回退
 
 ```bash
-./tools/tv-root.py 'ls -l /system/xbin/'
+./tools/run-task.sh ./payload/tasks/90_restore_stock.sh
+```
+
+恢复配置、启用所有被冻结的酷开/天翼包、把
+`persist.service.homepage.*` 指回 `com.tianci.movieplatform`、去掉
+`/system/etc/hosts` 里我们加的屏蔽行。
+
+---
+
+## 4. 开机自动化（U 盘自愈）
+
+### 4.1 `payload/hi_boot_shell.sh` 做什么
+
+每次插着 U 盘开机（或每逢您用 `setprop ctl.start boot-shell` 触发）自动：
+
+1. 配静态 IP（厂商的静态 IP 配置依赖被精简的"软设置"App，不配 adb 就连不上）；
+2. 修/校验厂商 boot-shell 脚本（防 CRLF 污染，见 §5 第 2 条）；
+3. 装 `su`（setuid root）；
+4. 装 U 盘上的 `aerial.apk` 并把 `DEFAULT_HOMEPAGE` 指过去；
+5. 清理悬空包记录（避免 PackageManager 追着不存在的 APK 使开机卡 logo）；
+6. 执行 `/data/local/tmp/pending_task.sh`（如果存在）。
+
+### 4.2 重刷固件后怎么办
+
+U 盘留着，开机后自愈链路自动重装 su、桌面、配置——**这就是为什么"永远保留
+U 盘"**。时钟补丁也一样，重跑 80 号任务即可：
+
+```bash
+./tools/run-task.sh ../payload/tasks/80_sync_boot_clock.sh
+```
+
+### 4.3 其他任务
+
+仓库 `payload/tasks/` 当前还有（用法同上，`run-task.sh`）：`20_debloat`（冻结
+冗余包）、`30_block_upgrade`（阻断酷开紧急升级回灌）、`40_uninstall_bloat`
+（卸载冗余包 + 清 /data）、`90_restore_stock`（回滚原厂）、`99_reboot`。
+任务清单与取舍详述在 [docs/02-debloat.md](docs/02-debloat.md)。
+
+---
+
+## 5. 操作红线（每一条都是踩坑人的真金白银）
+
+以下都是**真实事故换来的**，请当纪律而不是建议：
+
+1. **不要删任何 `android.uid.system`（uid 1000）共享组的 APK**。创维酷开一系包
+   共享该 uid，删掉任意一个都会使整个共享组的签名校验失效，
+   `com.tianci.system` 和你自己装的桌面**一起起不来 → 变砖**。精简这类包
+   **只用 `pm disable-user` / `pm uninstall --user 0`**（冻结，APK 留着）。
+   独立 uid 的包才能删 APK。见 [docs/08-brick-recovery.md](docs/08-brick-recovery.md) §7。
+2. **二进制/脚本传电视一律 `adb push` / `adb pull`**。`adb shell cat > 文件`
+   会把 LF 变 CRLF，导致厂商 boot-shell 脚本 syntax error、U 盘 root 通道整个
+   失效（2026-10 亲历，自己用 cat 把脚本写坏过一次）。
+3. **动手前先备份，且校验备份可读**（`tar -tf` 能列出才算备份成功）。
+4. **改 `/system` 的脚本，装上去之前先 `sh -n` 语法校验**（本仓库任务脚本
+   内置了这一步，自写脚本也要照做）。
+5. **U 盘永远留着**：它既是 root 通道（§2），也是救砖通道（§1.2），更是
+   重刷固件后的自愈通道（§4.2）。
+6. **开机时钟**：本机已通过 `/system/etc/init.bigfish.sh` 补丁 + U 盘任务
+   建立了开机自动校时（全 App 的系统时间都跟着纠正），原理与回滚见
+   [docs/09-clock-sync.md](docs/09-clock-sync.md)。重刷固件后重跑一次
+   `payload/tasks/80_sync_boot_clock.sh` 即可。
+
+---
+
+## 6. 目录结构
+
+```text
+skyworth-8h52-root/
+├── README.md                  # 本篇
+├── docs/
+│   ├── 02-debloat.md          # 精简清单/冻结清单/回滚
+│   ├── 07-walkman-tv.md       # 第三方音乐播放器 API 22 适配实录
+│   ├── 08-brick-recovery.md   # 变砖事故复盘 + 原厂固件包详解（§1 救砖的依据）
+│   └── 09-clock-sync.md       # 开机自动校时补丁（免手动 date -s）
+├── payload/
+│   ├── hi_boot_shell.sh       # U 盘入口脚本（含自愈逻辑）
+│   ├── hisi_boot_shell.sh.orig/.fixed   # 厂商脚本留底/修复版
+│   ├── timesync.sh            # 开机校时脚本（docs/09）
+│   ├── init.bigfish.sh.orig/.new        # 时钟补丁的原版与补丁版
+│   ├── su.c / su              # setuid-root 源码（30 行 C）与预编译
+│   └── tasks/                 # 以 init root 执行的任务（见 §4.3）
+├── patches/                   # 对第三方项目的本机补丁（不提上游）
+│   ├── aerial-8h52-adapt.patch
+│   └── walkman-tv-api22.patch
+├── tools/
+│   ├── tv-adb.sh              # ADB 唯一入口（本地转发+重试）
+│   ├── tv-adb-proxy.py        # 127.0.0.1:15555 -> 电视:5555
+│   ├── make-usb.sh            # 一键做启动盘
+│   ├── run-task.sh            # 任务推 TV + 以 init root 执行 + 读日志
+│   ├── deploy.sh              # 一键：换桌面 + 关广告 + 精简 + 校验
+│   ├── build-su.sh / build-guardctl.sh   # 交叉编译小工具（zig/clang）
+│   ├── cleanup-*.sh           # 精简/清理工具（匹配逻辑已修正）
+│   ├── gaddr.c                # guard 抽象 socket 客户端（仅历史参考，见 §2.4）
+│   └── tv-root.py             # guardctl 通道助手（现在的固件上不可用，存档）
+└── apk/README.md              # 第三方 APK 只给链接不随仓库分发（版权原因）
 ```
 
 ---
 
-## 4. 能力边界（务必阅读）
+## 7. 安全与合规
 
-`su` 虽然是 `uid=0`，但从 ADB 启动时继承的是 adbd 的 **capability bounding set = 0xc0**
-（只有 `CAP_SETUID` / `CAP_SETGID`），因此：
-
-| 操作 | `su -c` | boot-shell（init root） | guardctl/telnetd root |
-| --- | --- | --- | --- |
-| 改 `/system` 文件、remount rw | ❌ | ✅ | ✅ |
-| 读 `/data/ccos`（700 system） | ❌ | ✅ | ✅ |
-| `pm disable/uninstall` | ✅ | ✅ | ✅ |
-| 删应用数据、写 `/data` | 部分 | ✅ | ✅ |
-| `setprop` | ✅ | ✅ | ✅ |
-
-**结论**：日常用 `su`；涉及系统分区或厂商私有目录的改动，
-走 `run-task.sh`（boot-shell，需 U 盘）或 `tvroot`（完整 root，无需 U 盘）。
-
-> ⚠️ 两条 root 通道都不要用来做超出"自家电视折腾"范围的事；
-> 尤其 `telnetd 4149` 是 root shell，用完请 `su -c "/system/xbin/guardctl --raw stop_telnetd"` 关掉。
+* 本仓库不包含任何厂商 APK、固件或解密密钥；`payload/su` 是本项目自写的 30 行 C。
+* 工具默认只在本机 `127.0.0.1` 开端口；U 盘脚本不含任何联网行为。
+* 救砖所需的**官方固件包**不在本仓库，从创维官方 CDN 下载（§1.2 的 URL）。
+* 本指南仅供参考，供用户恢复**自己购买、自己有处置权的电视**的性能与体验；
+  由此产生的保修、责任问题不予担保。**ROOT 有风险，动手前三思**。
 
 ---
 
-## 5. 实战处理过程（时间线）
+## 8. 致谢
 
-下面是这台电视上真实跑过的完整流程，可直接照抄：
-
-| # | 动作 | 手段 | 结果 |
-| --- | --- | --- | --- |
-| 1 | 环境侦查 | `getprop` / `dumpsys` | SELinux 关闭、`ro.debuggable=1`、唯一 setuid root 是 `procrank` |
-| 2 | 找提权入口 | 读 `/system/bin/init.rc` | 发现厂商后门 `service boot-shell`（`user root`） |
-| 3 | 分析后门逻辑 | 读 `hisi_boot_shell.sh` | 它会以 root source U 盘根目录的 `hi_boot_shell.sh` |
-| 4 | 打通 ADB | `tools/tv-adb-proxy.py` | macOS 直连 `192.168.0.9:5555` 不通，改走本地转发 |
-| 5 | 准备 U 盘 | `tools/make-usb.sh` | FAT32 + MBR，卷标 `TVROOT` |
-| 6 | 编译 su | `tools/build-su.sh`（zig musl 静态） | 8 KB ARMv7 ELF，电视上实测可执行 |
-| 7 | 首次 root | `setprop ctl.start boot-shell` | `/system/xbin/su` 装好，`su -c id` → `uid=0(root)` |
-| 8 | 换桌面配置 | `payload/tasks/10_set_homepage.sh` | 改 `/system/pcfg/.../general_config.xml` + `/data/ccos/general_config.xml` + `persist.service.homepage.*` |
-| 9 | 冻结酷开桌面 | `payload/tasks/20_debloat.sh` | `pm disable-user` 桌面/应用商店/管家/用户中心/语音等 |
-| 10 | 阻断回灌 | `payload/tasks/30_block_upgrade.sh` | 发现 `skycast.tool` 的 EmergencyUpgradeEngine 会重装桌面 → 卸载 + 删包 + hosts 屏蔽 |
-| 11 | 真正卸载 | `payload/tasks/40_uninstall_bloat.sh` | 卸载 11 个冗余包 + 清 `/data` 残留，`/data` 空闲 519 MB → 1.2 GB |
-| 12 | 重启验收 | `payload/tasks/99_reboot.sh` | `mResumedActivity` = 目标桌面，root 仍在，应用数 45 → 33 |
-| 13 | 桌面选型 | 试装 LTvLauncher | API 22 崩溃（`NetworkStatsManager` API 23）→ 改用 AS Launcher |
-| 14 | 换新桌面 | 编译 CleanYourTV | `minSdk 26→22` + 脱糖 + 14 处 API 判断 → `com.gathin.tvhome`，写入 `DEFAULT_HOMEPAGE` |
-| 15 | **厂商脚本被写坏** | `adb shell cat` 备份 | CRLF 污染 `/system/bin/hisi_boot_shell.sh` → `boot-shell` 服务起不来，U 盘通道断掉 |
-| 16 | 逆向守护进程 | 读 `coocaa_guard` | 找到 `/data/ccos/guard.sock` 明文协议与 `start_telnetd` → 拿到**完整 root**（不经 U 盘） |
-| 17 | 修复厂商脚本 | 完整 root | 去 CR 还原 + 补回 IPv6 hook，`sh -n` 通过，md5 与 `.fixed` 副本一致 |
-| 18 | 固化 | 装 `/system/xbin/guardctl` `/system/xbin/tvroot` | 重启后仍可取 root；**不加开机看门狗**，`init.bigfish.sh` 保持原样 |
-| 19 | 换 Aerial 桌面 | 基于 `pengchujin/aerial-tv` 自行编译 | tvOS 风格桌面，API 22 实测正常（渲染/焦点/航拍屏保/开机接管），见 `docs/03-launcher.md` |
-| 20 | 修 Aerial 两个 bug | 改上游源码 | 「应用信息」在这台没有 Settings 的电视上失效 → 自己做面板；个性化面板二维码压住左侧 → 裁剪壁纸行。补丁见 `patches/`，说明见 `docs/06-aerial-skyworth.md` |
-| 21 | 试红果 TV 客户端 | 适配 API 22 成功 | 首页/搜索/详情都通，**但取流接口是字节内部接口，10-13 起全网失效**，社区补丁今天也失效 → 放弃并卸载 |
-| 22 | 装随便听（音乐） | 适配 walkman-tv 到 API 22 | minSdk 23→22、Media3 1.10→1.8（1.9+ 要 API 23）、开脱糖；首页/歌单/歌词/硬解播放全部实测通过 |
-
-每一步都可以回滚，见 [`docs/04-recovery.md`](docs/04-recovery.md)。
-
-## 6. 安全声明
-
-- 本仓库不包含任何厂商 APK、固件或解密密钥；`payload/su` 是本项目自写的 30 行 C。
-- 工具默认只在 `127.0.0.1` 开端口，U 盘里的脚本不含任何联网行为。
-- **`telnetd 4149` 只有 root 权限的用户该用**，用完请关掉：
-  `su -c "/system/xbin/guardctl --raw stop_telnetd"`。
-- 传文件一律用 `adb push` / `adb pull`；`adb shell cat` 会把 LF 转成 CRLF，
-  已经把厂商的 boot-shell 脚本写坏过一次（见 `docs/05-root-channels.md`）。
-- 使用前请先阅读 [`docs/04-recovery.md`](docs/04-recovery.md)，确保知道怎么退回去。
-
-## 7. 致谢
-
-- 厂商固件自带的 `hisi_boot_shell.sh`（未修改，仅利用其既有行为）
-- [FLauncher](https://gitlab.com/flauncher/flauncher) —— 备选桌面
-- [LTvLauncher](https://github.com/leanbitlab-org/LtvLauncher) —— 高版本桌面（API 22 需打补丁，详见 docs）
+* 厂商固件自带的 `hisi_boot_shell.sh`（未修改，仅利用其既有行为）
+* [Aerial (pengchujin/aerial-tv)](https://github.com/pengchujin/aerial-tv)、
+  [walkman-tv](https://github.com/walkman-tools/walkman-tv) 等开源 TV 项目
+* [FLauncher](https://gitlab.com/flauncher/flauncher)、CleanYourTV —— 桌面备选
+* 本文 §5 红线的每一条，都来自把事故写成文档的自觉 —— 愿每个动手的人先读再动
